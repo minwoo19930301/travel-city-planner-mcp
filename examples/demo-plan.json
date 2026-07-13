@@ -1,0 +1,362 @@
+{
+  "schema_version": 1,
+  "plan_id": "91f08c4b967a",
+  "revision": 1,
+  "created_at": "2026-07-13T18:23:29+00:00",
+  "updated_at": "2026-07-13T18:23:29+00:00",
+  "title": "도쿄 5박 6일",
+  "source_query": "도쿄로 4-5박 정도 머무르며 애니, 야경, 카페를 즐기는 가상 여행 추천 플래너",
+  "duration": {
+    "selected_nights": 5,
+    "selected_days": 6,
+    "requested_range": [
+      4,
+      5
+    ]
+  },
+  "pace": "balanced",
+  "preferences": [
+    "애니",
+    "야경",
+    "카페"
+  ],
+  "segments": [
+    {
+      "id": "segment-1",
+      "destination_id": "tokyo",
+      "city": "Tokyo",
+      "city_ko": "도쿄",
+      "country_ko": "일본",
+      "nights": 5,
+      "days": 6,
+      "day_start": 1,
+      "day_end": 6,
+      "start_date": null,
+      "end_date": null,
+      "currency": "JPY",
+      "time_zone": "Asia/Tokyo"
+    }
+  ],
+  "days": [
+    {
+      "day": 1,
+      "date": null,
+      "title": "시부야 & 하라주쿠",
+      "destination_ids": [
+        "tokyo"
+      ],
+      "activities": [
+        {
+          "id": "act-450976c1d8",
+          "destination_id": "tokyo",
+          "time": "10:00",
+          "title": "시부야 스크램블",
+          "location": "Shibuya Scramble Crossing",
+          "map_query": "Shibuya Scramble Crossing, Tokyo",
+          "map_url": "https://www.google.com/maps/search/?api=1&query=Shibuya+Scramble+Crossing%2C+Tokyo",
+          "icon": "sparkles",
+          "memo": "",
+          "source": "canonical-template",
+          "template_day": 0
+        },
+        {
+          "id": "act-b53e0cbb3f",
+          "destination_id": "tokyo",
+          "time": "13:00",
+          "title": "메이지 신궁",
+          "location": "Meiji Jingu",
+          "map_query": "Meiji Jingu, Tokyo",
+          "map_url": "https://www.google.com/maps/search/?api=1&query=Meiji+Jingu%2C+Tokyo",
+          "icon": "landmark",
+          "memo": "",
+          "source": "canonical-template",
+          "template_day": 0
+        },
+        {
+          "id": "act-e7c38ca5fa",
+          "destination_id": "tokyo",
+          "time": "18:30",
+          "title": "시부야 스카이",
+          "location": "Shibuya Sky",
+          "map_query": "Shibuya Sky, Tokyo",
+          "map_url": "https://www.google.com/maps/search/?api=1&query=Shibuya+Sky%2C+Tokyo",
+          "icon": "building",
+          "memo": "요청 취향 매칭: 야경",
+          "source": "canonical-template",
+          "template_day": 0
+        }
+      ],
+      "route_summary": "시부야 스크램블 → 메이지 신궁 → 시부야 스카이",
+      "route_map_url": "https://www.google.com/maps/dir/?api=1&origin=Shibuya+Scramble+Crossing%2C+Tokyo&destination=Shibuya+Sky%2C+Tokyo&travelmode=transit&waypoints=Meiji+Jingu%2C+Tokyo"
+    },
+    {
+      "day": 2,
+      "date": null,
+      "title": "아사쿠사 & 스미다",
+      "destination_ids": [
+        "tokyo"
+      ],
+      "activities": [
+        {
+          "id": "act-be8ebd509d",
+          "destination_id": "tokyo",
+          "time": "10:30",
+          "title": "센소지",
+          "location": "Senso-ji",
+          "map_query": "Senso-ji, Tokyo",
+          "map_url": "https://www.google.com/maps/search/?api=1&query=Senso-ji%2C+Tokyo",
+          "icon": "landmark",
+          "memo": "",
+          "source": "canonical-template",
+          "template_day": 1
+        },
+        {
+          "id": "act-da80eb884b",
+          "destination_id": "tokyo",
+          "time": "13:30",
+          "title": "나카미세 거리",
+          "location": "Nakamise-dori Street",
+          "map_query": "Nakamise-dori Street, Tokyo",
+          "map_url": "https://www.google.com/maps/search/?api=1&query=Nakamise-dori+Street%2C+Tokyo",
+          "icon": "shopping-bag",
+          "memo": "",
+          "source": "canonical-template",
+          "template_day": 1
+        },
+        {
+          "id": "act-d0f29635c3",
+          "destination_id": "tokyo",
+          "time": "18:00",
+          "title": "도쿄 스카이트리",
+          "location": "Tokyo Skytree",
+          "map_query": "Tokyo Skytree, Tokyo",
+          "map_url": "https://www.google.com/maps/search/?api=1&query=Tokyo+Skytree%2C+Tokyo",
+          "icon": "tower-control",
+          "memo": "요청 취향 매칭: 야경",
+          "source": "canonical-template",
+          "template_day": 1
+        }
+      ],
+      "route_summary": "센소지 → 나카미세 거리 → 도쿄 스카이트리",
+      "route_map_url": "https://www.google.com/maps/dir/?api=1&origin=Senso-ji%2C+Tokyo&destination=Tokyo+Skytree%2C+Tokyo&travelmode=transit&waypoints=Nakamise-dori+Street%2C+Tokyo"
+    },
+    {
+      "day": 3,
+      "date": null,
+      "title": "긴자 & 도쿄역",
+      "destination_ids": [
+        "tokyo"
+      ],
+      "activities": [
+        {
+          "id": "act-0efdaa5697",
+          "destination_id": "tokyo",
+          "time": "10:30",
+          "title": "긴자 카페",
+          "location": "Ginza",
+          "map_query": "Ginza, Tokyo",
+          "map_url": "https://www.google.com/maps/search/?api=1&query=Ginza%2C+Tokyo",
+          "icon": "coffee",
+          "memo": "요청 취향 매칭: 카페",
+          "source": "canonical-template",
+          "template_day": 2
+        },
+        {
+          "id": "act-0facab6e78",
+          "destination_id": "tokyo",
+          "time": "14:00",
+          "title": "캐릭터 스트리트",
+          "location": "Tokyo Character Street",
+          "map_query": "Tokyo Character Street, Tokyo",
+          "map_url": "https://www.google.com/maps/search/?api=1&query=Tokyo+Character+Street%2C+Tokyo",
+          "icon": "gift",
+          "memo": "요청 취향 매칭: 애니",
+          "source": "canonical-template",
+          "template_day": 2
+        },
+        {
+          "id": "act-86955d7bd2",
+          "destination_id": "tokyo",
+          "time": "19:00",
+          "title": "마루노우치 야경",
+          "location": "Marunouchi",
+          "map_query": "Marunouchi, Tokyo",
+          "map_url": "https://www.google.com/maps/search/?api=1&query=Marunouchi%2C+Tokyo",
+          "icon": "moon-star",
+          "memo": "요청 취향 매칭: 야경",
+          "source": "canonical-template",
+          "template_day": 2
+        }
+      ],
+      "route_summary": "긴자 카페 → 캐릭터 스트리트 → 마루노우치 야경",
+      "route_map_url": "https://www.google.com/maps/dir/?api=1&origin=Ginza%2C+Tokyo&destination=Marunouchi%2C+Tokyo&travelmode=transit&waypoints=Tokyo+Character+Street%2C+Tokyo"
+    },
+    {
+      "day": 4,
+      "date": null,
+      "title": "우에노 & 아키하바라",
+      "destination_ids": [
+        "tokyo"
+      ],
+      "activities": [
+        {
+          "id": "act-e36d443a9e",
+          "destination_id": "tokyo",
+          "time": "10:00",
+          "title": "우에노 공원",
+          "location": "Ueno Park",
+          "map_query": "Ueno Park, Tokyo",
+          "map_url": "https://www.google.com/maps/search/?api=1&query=Ueno+Park%2C+Tokyo",
+          "icon": "trees",
+          "memo": "",
+          "source": "canonical-template",
+          "template_day": 3
+        },
+        {
+          "id": "act-ab3c550665",
+          "destination_id": "tokyo",
+          "time": "13:30",
+          "title": "도쿄 국립박물관",
+          "location": "Tokyo National Museum",
+          "map_query": "Tokyo National Museum, Tokyo",
+          "map_url": "https://www.google.com/maps/search/?api=1&query=Tokyo+National+Museum%2C+Tokyo",
+          "icon": "building-2",
+          "memo": "",
+          "source": "canonical-template",
+          "template_day": 3
+        },
+        {
+          "id": "act-7c1462715d",
+          "destination_id": "tokyo",
+          "time": "18:00",
+          "title": "아키하바라",
+          "location": "Akihabara",
+          "map_query": "Akihabara, Tokyo",
+          "map_url": "https://www.google.com/maps/search/?api=1&query=Akihabara%2C+Tokyo",
+          "icon": "shopping-cart",
+          "memo": "요청 취향 매칭: 애니",
+          "source": "canonical-template",
+          "template_day": 3
+        }
+      ],
+      "route_summary": "우에노 공원 → 도쿄 국립박물관 → 아키하바라",
+      "route_map_url": "https://www.google.com/maps/dir/?api=1&origin=Ueno+Park%2C+Tokyo&destination=Akihabara%2C+Tokyo&travelmode=transit&waypoints=Tokyo+National+Museum%2C+Tokyo"
+    },
+    {
+      "day": 5,
+      "date": null,
+      "title": "여유일 1 · 취향 보강",
+      "destination_ids": [
+        "tokyo"
+      ],
+      "activities": [
+        {
+          "id": "act-277ae94d5a",
+          "destination_id": "tokyo",
+          "time": "11:00",
+          "title": "도쿄 동네 자유 탐방",
+          "location": "Tokyo local neighborhood",
+          "map_query": "Tokyo local neighborhood, Tokyo",
+          "map_url": "https://www.google.com/maps/search/?api=1&query=Tokyo+local+neighborhood%2C+Tokyo",
+          "icon": "map",
+          "memo": "원본 일정 사이에 넣은 컨디션 조절용 자유 일정",
+          "source": "generated-flex",
+          "template_day": 4
+        },
+        {
+          "id": "act-6fdd9532ca",
+          "destination_id": "tokyo",
+          "time": "16:00",
+          "title": "예약·휴식 버퍼",
+          "location": "Tokyo cafe",
+          "map_query": "Tokyo cafe, Tokyo",
+          "map_url": "https://www.google.com/maps/search/?api=1&query=Tokyo+cafe%2C+Tokyo",
+          "icon": "coffee",
+          "memo": "밀린 일정, 카페, 쇼핑 중 현지에서 선택 · 요청 취향 매칭: 카페",
+          "source": "generated-flex",
+          "template_day": 4
+        }
+      ],
+      "route_summary": "도쿄 동네 자유 탐방 → 예약·휴식 버퍼",
+      "route_map_url": "https://www.google.com/maps/dir/?api=1&origin=Tokyo+local+neighborhood%2C+Tokyo&destination=Tokyo+cafe%2C+Tokyo&travelmode=transit"
+    },
+    {
+      "day": 6,
+      "date": null,
+      "title": "마지막 쇼핑 & 이동",
+      "destination_ids": [
+        "tokyo"
+      ],
+      "activities": [
+        {
+          "id": "act-a511d0dc0b",
+          "destination_id": "tokyo",
+          "time": "10:00",
+          "title": "돈키호테 쇼핑",
+          "location": "Don Quijote Shibuya",
+          "map_query": "Don Quijote Shibuya, Tokyo",
+          "map_url": "https://www.google.com/maps/search/?api=1&query=Don+Quijote+Shibuya%2C+Tokyo",
+          "icon": "shopping-bag",
+          "memo": "",
+          "source": "canonical-template",
+          "template_day": 5
+        },
+        {
+          "id": "act-b573746685",
+          "destination_id": "tokyo",
+          "time": "13:00",
+          "title": "공항 이동 준비",
+          "location": "Tokyo Station",
+          "map_query": "Tokyo Station, Tokyo",
+          "map_url": "https://www.google.com/maps/search/?api=1&query=Tokyo+Station%2C+Tokyo",
+          "icon": "luggage",
+          "memo": "",
+          "source": "canonical-template",
+          "template_day": 5
+        },
+        {
+          "id": "act-3037c8a9b1",
+          "destination_id": "tokyo",
+          "time": "16:30",
+          "title": "하네다 이동",
+          "location": "Haneda Airport",
+          "map_query": "Haneda Airport, Tokyo",
+          "map_url": "https://www.google.com/maps/search/?api=1&query=Haneda+Airport%2C+Tokyo",
+          "icon": "plane",
+          "memo": "",
+          "source": "canonical-template",
+          "template_day": 5
+        }
+      ],
+      "route_summary": "돈키호테 쇼핑 → 공항 이동 준비 → 하네다 이동",
+      "route_map_url": "https://www.google.com/maps/dir/?api=1&origin=Don+Quijote+Shibuya%2C+Tokyo&destination=Haneda+Airport%2C+Tokyo&travelmode=transit&waypoints=Tokyo+Station%2C+Tokyo"
+    }
+  ],
+  "live_data": {
+    "weather": {
+      "status": "skipped",
+      "segments": []
+    },
+    "exchange": {
+      "status": "skipped",
+      "rates": []
+    }
+  },
+  "shorter_variant": {
+    "nights": 4,
+    "days": 5,
+    "hint": "4박 5일로 줄일 때는 Day 5 ‘여유일 1 · 취향 보강’을 빼고 마지막 이동일을 앞당기세요."
+  },
+  "catalog": {
+    "digest": "fda48cdeb2e0aac9",
+    "source": {
+      "repository": "https://github.com/minwoo19930301/tour-city-planner",
+      "commit": "c0e544f604adfdc52d5c2c93480c5ac4d0aeea7e",
+      "license": "CC BY-NC 4.0 with the original commercial exception notice"
+    }
+  },
+  "demo": {
+    "fictional": true,
+    "note": "문서와 viewer 검증을 위한 가상 시나리오이며 실제 예약 정보가 아닙니다."
+  }
+}

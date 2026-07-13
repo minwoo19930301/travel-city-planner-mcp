@@ -1,0 +1,14 @@
+[project]
+name = "travel-city-planner-mcp"
+version = "1.0.0"
+description = "Natural-language travel planning MCP backed by the canonical Tour City Planner catalog"
+requires-python = ">=3.11"
+dependencies = [
+  "mcp==1.28.1",
+  "httpx==0.28.1",
+  "uvicorn==0.51.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
