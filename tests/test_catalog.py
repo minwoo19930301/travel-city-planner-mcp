@@ -13,6 +13,8 @@ def test_canonical_catalog_has_all_69_destinations_and_assets() -> None:
     assert catalog.get("도쿄")["id"] == "tokyo"
     assert catalog.get("Tokyo")["cityKo"] == "도쿄"
     assert len(list((ROOT / "viewer/assets/heroes").glob("*.jpg"))) == 69
+    hero_images = [destination["heroImage"] for destination in catalog.destinations.values()]
+    assert len(hero_images) == len(set(hero_images)) == 69
     for destination in catalog.destinations.values():
         assert destination["itineraryTemplate"]
         assert destination["phrases"]

@@ -101,6 +101,7 @@ def test_paris_vienna_boundary_has_one_ordered_city_transition() -> None:
     assert origin["destination_id"] == "paris"
     assert origin["time"] < "12:00"
     assert transfer["destination_id"] == "austria"
+    assert transfer["time"] == "13:00"
     assert transfer["source"] == "generated-transfer"
     assert destination["destination_id"] == "austria"
     assert destination["time"] >= "17:00"
@@ -119,6 +120,52 @@ def test_paris_vienna_boundary_has_one_ordered_city_transition() -> None:
     for index, leg in enumerate(boundary["legs"]):
         assert leg["from"]["activity_id"] == boundary["activities"][index]["id"]
         assert leg["to"]["activity_id"] == boundary["activities"][index + 1]["id"]
+
+
+def test_long_haul_boundaries_do_not_schedule_destination_tourism() -> None:
+    service = PlannerService()
+    for origin_id, destination_id in (
+        ("tokyo", "taipei"),
+        ("tokyo", "paris"),
+        ("los-angeles", "tokyo"),
+    ):
+        plan = run(
+            service.create_plan(
+                [
+                    {"destination_id": origin_id, "nights": 2},
+                    {"destination_id": destination_id, "nights": 2},
+                ],
+                start_date="2026-10-01",
+                pace="relaxed",
+                include_live_data=False,
+            )
+        )
+
+        boundary = plan["days"][2]
+        assert boundary["destination_ids"] == [origin_id, destination_id]
+        assert len(boundary["activities"]) == 2
+        origin, transfer = boundary["activities"]
+        assert origin["destination_id"] == origin_id
+        assert origin["time"] < "12:00"
+        assert transfer["destination_id"] == destination_id
+        assert transfer["time"] == "13:00"
+        assert transfer["source"] == "generated-transfer"
+        assert "도착 후 휴식" in transfer["memo"]
+        assert len(boundary["legs"]) == 1
+        assert boundary["legs"][0]["from"]["activity_id"] == origin["id"]
+        assert boundary["legs"][0]["to"]["activity_id"] == transfer["id"]
+        assert set(boundary["legs"][0]["route_urls"]) == {
+            "transit",
+            "walking",
+            "driving",
+        }
+        city_transitions = sum(
+            left["destination_id"] != right["destination_id"]
+            for left, right in zip(
+                boundary["activities"], boundary["activities"][1:]
+            )
+        )
+        assert city_transitions == 1
 
 
 def test_undated_weather_never_substitutes_current_conditions() -> None:

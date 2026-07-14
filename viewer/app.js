@@ -113,15 +113,46 @@ function destinationFor(id) {
   return destination;
 }
 
+function isRecord(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 function validatePlanForViewer(plan) {
   const knownDestination = (id) => typeof id === "string" && Boolean(catalog?.destinations?.[id]);
+  const liveData = plan?.live_data;
+  const weather = liveData?.weather;
+  const exchange = liveData?.exchange;
+  const validWeather = weather === undefined || (
+    isRecord(weather)
+    && (weather.segments === undefined || (
+      Array.isArray(weather.segments)
+      && weather.segments.every((segment) => isRecord(segment) && (
+        segment.days === undefined
+        || (Array.isArray(segment.days) && segment.days.every(isRecord))
+      ))
+    ))
+  );
+  const validExchange = exchange === undefined || (
+    isRecord(exchange)
+    && (exchange.rates === undefined || (
+      Array.isArray(exchange.rates) && exchange.rates.every(isRecord)
+    ))
+  );
+  const validShorterVariant = plan?.shorter_variant == null || (
+    isRecord(plan.shorter_variant) && typeof plan.shorter_variant.hint === "string"
+  );
+  const validLegs = (day) => ["legs", "route_legs"].every((key) => (
+    day[key] == null || (Array.isArray(day[key]) && day[key].every(isRecord))
+  ));
   if (
-    !plan || !hasValidPlanIdentity(plan)
+    !isRecord(plan) || !hasValidPlanIdentity(plan)
+    || typeof plan.title !== "string" || !plan.title.trim()
     || !Array.isArray(plan.segments) || !plan.segments.length
-    || !plan.segments.every((segment) => knownDestination(segment?.destination_id))
+    || !plan.segments.every((segment) => isRecord(segment) && knownDestination(segment.destination_id))
     || !Array.isArray(plan.days) || !plan.days.length
-    || !plan.days.every((day) => Array.isArray(day?.activities) && day.activities.every((activity) => (
-      activity && knownDestination(activity.destination_id)
+    || !isRecord(liveData) || !validWeather || !validExchange || !validShorterVariant
+    || !plan.days.every((day) => isRecord(day) && validLegs(day) && Array.isArray(day.activities) && day.activities.every((activity) => (
+      isRecord(activity) && knownDestination(activity.destination_id)
       && ["time", "title", "location"].every((key) => typeof activity[key] === "string")
     )))
   ) throw new Error("content token의 도시 또는 일정 구조가 올바르지 않습니다.");

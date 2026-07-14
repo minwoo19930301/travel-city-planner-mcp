@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 import re
 import uuid
 from datetime import date, datetime, timedelta, timezone
@@ -128,6 +129,7 @@ def _route_url(activities: list[dict[str, Any]]) -> str:
 
 
 TRAVEL_MODES = ("transit", "walking", "driving")
+LONG_HAUL_DISTANCE_KM = 2_000.0
 
 
 def _directions_url(origin: str, destination: str, travelmode: str) -> str:
@@ -148,6 +150,49 @@ def _route_options(origin: str, destination: str) -> dict[str, str]:
         mode: _directions_url(origin, destination, mode)
         for mode in TRAVEL_MODES
     }
+
+
+def _catalog_distance_km(
+    origin: dict[str, Any], destination: dict[str, Any]
+) -> float | None:
+    """Return the catalog's great-circle distance when both cities have coordinates."""
+    try:
+        origin_weather = origin["weather"]
+        destination_weather = destination["weather"]
+        origin_latitude = float(origin_weather["latitude"])
+        origin_longitude = float(origin_weather["longitude"])
+        destination_latitude = float(destination_weather["latitude"])
+        destination_longitude = float(destination_weather["longitude"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+    latitude_delta = math.radians(destination_latitude - origin_latitude)
+    longitude_delta = math.radians(destination_longitude - origin_longitude)
+    origin_latitude_radians = math.radians(origin_latitude)
+    destination_latitude_radians = math.radians(destination_latitude)
+    haversine = (
+        math.sin(latitude_delta / 2) ** 2
+        + math.cos(origin_latitude_radians)
+        * math.cos(destination_latitude_radians)
+        * math.sin(longitude_delta / 2) ** 2
+    )
+    bounded_haversine = min(1.0, max(0.0, haversine))
+    return 6_371.0 * 2 * math.asin(math.sqrt(bounded_haversine))
+
+
+def _is_long_haul(
+    origin: dict[str, Any], destination: dict[str, Any]
+) -> bool:
+    distance = _catalog_distance_km(origin, destination)
+    if distance is not None:
+        return distance >= LONG_HAUL_DISTANCE_KM
+    origin_region = origin.get("region")
+    destination_region = destination.get("region")
+    return bool(
+        origin_region
+        and destination_region
+        and origin_region != destination_region
+    )
 
 
 def _validate_web_url(value: Any, field_name: str) -> None:
@@ -344,32 +389,35 @@ class PlannerService:
                     if origin_morning["time"] >= "12:00":
                         origin_morning["time"] = "10:00"
 
-                    destination_activities = city_day["activities"]
-                    evening_options = [
-                        activity for activity in destination_activities
-                        if activity["time"] >= "17:00"
-                    ]
-                    destination_evening = copy.deepcopy(
-                        (evening_options or destination_activities)[-1]
-                    )
-                    if destination_evening["time"] < "17:00":
-                        destination_evening["time"] = "18:00"
-
+                    long_haul = _is_long_haul(previous, destination)
                     transfer = self._activity(
                         destination=destination,
                         time="13:00",
                         title=transfer_title,
                         location=f"{previous['city']} to {destination['city']}",
                         icon="train-front",
-                        memo="다도시 구간 이동일",
+                        memo=(
+                            "장거리 구간 이동일 · 도착 후 휴식 권장"
+                            if long_haul
+                            else "다도시 구간 이동일"
+                        ),
                         source="generated-transfer",
                     )
                     plan_day["destination_ids"].append(destination["id"])
-                    plan_day["activities"] = [
-                        origin_morning,
-                        transfer,
-                        destination_evening,
-                    ]
+                    boundary_activities = [origin_morning, transfer]
+                    if not long_haul:
+                        destination_activities = city_day["activities"]
+                        evening_options = [
+                            activity for activity in destination_activities
+                            if activity["time"] >= "17:00"
+                        ]
+                        destination_evening = copy.deepcopy(
+                            (evening_options or destination_activities)[-1]
+                        )
+                        if destination_evening["time"] < "17:00":
+                            destination_evening["time"] = "18:00"
+                        boundary_activities.append(destination_evening)
+                    plan_day["activities"] = boundary_activities
                     plan_day["title"] = transfer_title
                 else:
                     if destination["id"] not in plan_day["destination_ids"]:
@@ -915,6 +963,65 @@ class PlannerService:
             raise TokenError("plan catalog metadata is missing")
         if not isinstance(plan.get("live_data"), dict):
             raise TokenError("plan live-data metadata is missing")
+        live_data = plan["live_data"]
+        if "weather" in live_data:
+            weather = live_data["weather"]
+            if not isinstance(weather, dict):
+                raise TokenError("plan weather metadata must be an object")
+            if "status" in weather and not isinstance(weather["status"], str):
+                raise TokenError("plan weather status is invalid")
+            if "message" in weather and weather["message"] is not None and not isinstance(weather["message"], str):
+                raise TokenError("plan weather message is invalid")
+            if "segments" in weather:
+                weather_segments = weather["segments"]
+                if not isinstance(weather_segments, list) or not all(
+                    isinstance(segment, dict) for segment in weather_segments
+                ):
+                    raise TokenError("plan weather segments must be objects")
+                for weather_segment in weather_segments:
+                    if "days" in weather_segment:
+                        weather_days = weather_segment["days"]
+                        if not isinstance(weather_days, list) or not all(
+                            isinstance(weather_day, dict)
+                            for weather_day in weather_days
+                        ):
+                            raise TokenError("plan weather days must be objects")
+        if "exchange" in live_data:
+            exchange = live_data["exchange"]
+            if not isinstance(exchange, dict):
+                raise TokenError("plan exchange metadata must be an object")
+            if "status" in exchange and not isinstance(exchange["status"], str):
+                raise TokenError("plan exchange status is invalid")
+            if "rates" in exchange:
+                rates = exchange["rates"]
+                if not isinstance(rates, list) or not all(
+                    isinstance(rate, dict) for rate in rates
+                ):
+                    raise TokenError("plan exchange rates must be objects")
+                for rate in rates:
+                    if "currency" in rate and not isinstance(rate["currency"], str):
+                        raise TokenError("plan exchange currency is invalid")
+                    value = rate.get("krw_per_unit")
+                    if value is not None and (
+                        not isinstance(value, (int, float)) or isinstance(value, bool)
+                    ):
+                        raise TokenError("plan exchange rate value is invalid")
+        shorter_variant = plan.get("shorter_variant")
+        if shorter_variant is not None:
+            if not isinstance(shorter_variant, dict):
+                raise TokenError("plan shorter variant must be an object")
+            if any(
+                not isinstance(shorter_variant.get(field), int)
+                or isinstance(shorter_variant.get(field), bool)
+                or shorter_variant[field] < 1
+                for field in ("nights", "days")
+            ):
+                raise TokenError("plan shorter variant duration is invalid")
+            if (
+                not isinstance(shorter_variant.get("hint"), str)
+                or not shorter_variant["hint"].strip()
+            ):
+                raise TokenError("plan shorter variant hint is invalid")
         if not isinstance(plan.get("title"), str) or not plan["title"].strip():
             raise TokenError("plan title is missing")
         if not isinstance(plan.get("duration"), dict):

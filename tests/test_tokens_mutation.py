@@ -116,11 +116,19 @@ def test_tampered_token_rejects_missing_structure_and_google_lookalikes() -> Non
 @pytest.mark.parametrize(
     ("path", "malicious_value"),
     [
+        (("shorter_variant",), {"oops": 1}),
+        (("live_data", "weather"), []),
+        (("live_data", "weather"), {"status": "skipped", "segments": [None]}),
+        (("live_data", "exchange"), []),
+        (("live_data", "exchange", "rates"), None),
+        (("live_data", "exchange"), {"status": "skipped", "rates": [None]}),
         (("days", 0, "route_map_url"), {}),
         (("days", 0, "activities", 0, "map_url"), []),
         (("days", 0, "activities", 0), "not-an-activity"),
         (("days", 0, "legs", 0), "not-a-leg"),
         (("days", 0, "legs", 0, "route_urls"), []),
+        (("days", 0, "legs", 0, "route_urls", "transit"), {}),
+        (("days", 0, "legs", 0, "route_urls", "walking"), []),
         (("days", 0, "legs", 0, "from"), []),
         (("days", 0, "legs", 0, "to"), "not-an-endpoint"),
     ],
@@ -137,6 +145,18 @@ def test_malicious_nested_token_structures_always_raise_token_error(
 
     with pytest.raises(TokenError):
         service.decode(encode_content_token(plan))
+
+
+def test_legacy_v1_optional_live_data_and_shorter_variant_remain_compatible() -> None:
+    service = PlannerService()
+    plan = make_plan(service)
+    plan.pop("shorter_variant")
+    plan["live_data"] = {}
+
+    restored = service.decode(encode_content_token(plan))
+
+    assert "shorter_variant" not in restored
+    assert restored["live_data"] == {}
 
 
 @pytest.mark.parametrize("malicious_activity", ([], {}, "not-an-activity"))

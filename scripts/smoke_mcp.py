@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
 import json
 import os
 from pathlib import Path
@@ -15,11 +16,11 @@ import tempfile
 import time
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
+import zlib
 
 import httpx
 from mcp import ClientSession, types
 from mcp.client.streamable_http import streamable_http_client
-
 
 EXPECTED_TOOLS = {
     "list_destinations",
@@ -39,6 +40,19 @@ GMARKET_FONT_ASSETS = (
     "GmarketSansMedium.woff2",
     "GmarketSansBold.woff2",
 )
+
+
+def decode_smoke_token(token: str) -> dict[str, Any]:
+    """Decode only a token returned by this smoke run so it can be tampered with."""
+
+    encoded = token.removeprefix("tp1.")
+    compressed = base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))
+    return json.loads(zlib.decompress(compressed).decode("utf-8"))
+
+
+def encode_smoke_token(plan: dict[str, Any]) -> str:
+    raw = json.dumps(plan, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    return "tp1." + base64.urlsafe_b64encode(zlib.compress(raw)).decode("ascii").rstrip("=")
 
 
 def choose_port() -> int:
@@ -132,6 +146,29 @@ def assert_plan_routes(plan: dict[str, Any]) -> None:
                 )
             checked_legs += 1
     assert checked_legs > 0, "plan smoke did not exercise any route leg"
+
+
+def assert_paris_vienna_boundary(plan: dict[str, Any]) -> None:
+    """Keep the transfer-day contract visible at the public MCP boundary."""
+
+    boundary = next(
+        day for day in plan["itinerary"]
+        if day["destinations"] == ["paris", "austria"]
+    )
+    activities = boundary["activities"]
+    assert len(activities) == 3
+    assert [activity["destination_id"] for activity in activities] == [
+        "paris", "austria", "austria"
+    ]
+    assert activities[0]["time"] < "12:00"
+    assert activities[1]["time"] == "13:00"
+    assert activities[1]["title"] == "파리 → 빈 이동"
+    assert activities[1]["memo"] == "다도시 구간 이동일"
+    assert activities[2]["time"] >= "17:00"
+    assert sum(
+        left["destination_id"] != right["destination_id"]
+        for left, right in zip(activities, activities[1:])
+    ) == 1
 
 
 async def exercise_server(base_url: str) -> None:
@@ -322,8 +359,8 @@ async def exercise_server(base_url: str) -> None:
                     {
                         "segments_json": json.dumps(
                             [
-                                {"destination_id": "tokyo", "nights": 2},
-                                {"destination_id": "taipei", "nights": 2},
+                                {"destination_id": "paris", "nights": 2},
+                                {"destination_id": "austria", "nights": 2},
                             ]
                         ),
                         "preferences": "시장, 야경, 로컬 음식",
@@ -334,12 +371,12 @@ async def exercise_server(base_url: str) -> None:
             )
             assert multi_created["ok"] is True
             assert multi_created["revision"] == 1
-            assert multi_created["title"] == "도쿄 · 타이베이 4박 5일"
+            assert multi_created["title"] == "파리 · 빈 4박 5일"
             assert multi_created["duration"]["selected_nights"] == 4
             assert multi_created["duration"]["selected_days"] == 5
             assert [
                 segment["destination_id"] for segment in multi_created["segments"]
-            ] == ["tokyo", "taipei"]
+            ] == ["paris", "austria"]
             assert len(multi_created["itinerary"]) == 5
             itinerary_destination_ids = {
                 destination_id
@@ -347,10 +384,11 @@ async def exercise_server(base_url: str) -> None:
                 for destination_id in day["destinations"]
             }
             assert itinerary_destination_ids == {
-                "tokyo",
-                "taipei",
+                "paris",
+                "austria",
             }
             assert_plan_routes(multi_created)
+            assert_paris_vienna_boundary(multi_created)
             multi_token = multi_created["content_token"]
             assert multi_token.startswith("tp1.")
 
@@ -366,8 +404,9 @@ async def exercise_server(base_url: str) -> None:
             assert multi_reopened["content_token"] == multi_token
             assert [
                 segment["destination_id"] for segment in multi_reopened["segments"]
-            ] == ["tokyo", "taipei"]
+            ] == ["paris", "austria"]
             assert_plan_routes(multi_reopened)
+            assert_paris_vienna_boundary(multi_reopened)
 
             multi_validation = structured(
                 await session.call_tool(
@@ -382,6 +421,22 @@ async def exercise_server(base_url: str) -> None:
             assert multi_validation["catalog_digest"] == full_catalog["catalog_digest"]
             assert multi_validation["token_survives_restart"] is True
 
+            nested_attack = decode_smoke_token(multi_token)
+            nested_attack["days"][0]["legs"][0]["route_urls"]["transit"] = {}
+            malicious_validation = structured(
+                await session.call_tool(
+                    "validate_plan",
+                    {"content_token": encode_smoke_token(nested_attack)},
+                )
+            )
+            assert malicious_validation["ok"] is False
+            assert malicious_validation["error"] == "TokenError"
+            # A malformed token is contained as a structured MCP result and
+            # cannot take down the server or poison a valid token session.
+            assert (await session.call_tool(
+                "get_plan", {"content_token": multi_token}
+            )).isError is not True
+
             multi_html_export = structured(
                 await session.call_tool(
                     "export_plan", {"content_token": multi_token, "format": "html"}
@@ -391,8 +446,8 @@ async def exercise_server(base_url: str) -> None:
             assert multi_html_export["filename"].endswith(".html")
             multi_html = multi_html_export["html"]
             assert "<!doctype html>" in multi_html.lower()
-            assert 'data-city-id="tokyo"' in multi_html
-            assert 'data-city-id="taipei"' in multi_html
+            assert 'data-city-id="paris"' in multi_html
+            assert 'data-city-id="austria"' in multi_html
             assert "Gmarket" in multi_html
             assert "data:font/woff2;base64," in multi_html
             assert "data:image/jpeg;base64," in multi_html
@@ -417,13 +472,19 @@ async def exercise_server(base_url: str) -> None:
                     assert font.status_code == 200
                     assert font.content.startswith(b"wOF2"), font_name
 
-                for destination_id in ("tokyo", "taipei"):
-                    hero_url = catalog_by_id[destination_id]["hero_url"]
-                    hero = await client.get(hero_url)
-                    hero.raise_for_status()
-                    assert hero.status_code == 200
-                    assert hero.headers["content-type"].startswith("image/jpeg")
-                    assert hero.content.startswith(b"\xff\xd8\xff"), destination_id
+                hero_urls = [item["hero_url"] for item in catalog_by_id.values()]
+                assert len(hero_urls) == len(set(hero_urls)) == 69
+                for destination_id, destination in catalog_by_id.items():
+                    async with client.stream("GET", destination["hero_url"]) as hero:
+                        hero.raise_for_status()
+                        assert hero.status_code == 200
+                        assert hero.headers["content-type"].startswith("image/jpeg")
+                        prefix = bytearray()
+                        async for chunk in hero.aiter_bytes():
+                            prefix.extend(chunk)
+                            if len(prefix) >= 3:
+                                break
+                        assert bytes(prefix[:3]) == b"\xff\xd8\xff", destination_id
 
                 city_guide = await client.get(
                     f"{base_url}/api/city-guide/tokyo",

@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createServer } from "node:http";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { extname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -25,6 +25,8 @@ const MIME_TYPES = {
 let server;
 let baseUrl;
 let exportPath;
+let longTitleExportPath;
+let maliciousExportPath;
 let tempDir;
 
 function contentToken(plan) {
@@ -67,6 +69,14 @@ async function startFixtureServer() {
       }
       if (pathname === "/export") {
         send(response, 200, readFileSync(exportPath), MIME_TYPES[".html"]);
+        return;
+      }
+      if (pathname === "/export-long-title") {
+        send(response, 200, readFileSync(longTitleExportPath), MIME_TYPES[".html"]);
+        return;
+      }
+      if (pathname === "/export-malicious") {
+        send(response, 200, readFileSync(maliciousExportPath), MIME_TYPES[".html"]);
         return;
       }
 
@@ -124,10 +134,10 @@ function collectRuntimeErrors(page) {
   return errors;
 }
 
-async function openViewer(page, plan = FIXTURE_PLAN) {
+async function openViewer(page, plan = FIXTURE_PLAN, { exchangeState = "live" } = {}) {
   await page.goto(`${baseUrl}/viewer#plan=${contentToken(plan)}`, { waitUntil: "networkidle" });
   await expect(page.locator("#app")).toHaveAttribute("aria-busy", "false");
-  await expect(page.locator(".exchange-panel")).toHaveAttribute("data-exchange-state", "live");
+  if (exchangeState) await expect(page.locator(".exchange-panel")).toHaveAttribute("data-exchange-state", exchangeState);
 }
 
 async function expectLoadedGmarket(page, family) {
@@ -210,10 +220,29 @@ async function expectKeyboardFocusVisible(page) {
 test.beforeAll(async () => {
   tempDir = mkdtempSync(resolve(tmpdir(), "travel-browser-gate-"));
   exportPath = resolve(tempDir, "travel-export.html");
+  longTitleExportPath = resolve(tempDir, "travel-export-long-title.html");
+  maliciousExportPath = resolve(tempDir, "travel-export-malicious.html");
   execFileSync(process.env.PYTHON || "python3", [resolve(TEST_DIR, "build_export_fixture.py"), PLAN_PATH, exportPath], {
     cwd: ROOT,
     stdio: "inherit",
   });
+  const longTitlePlan = structuredClone(FIXTURE_PLAN);
+  longTitlePlan.title = "초장문여행제목".repeat(40);
+  const maliciousPlan = structuredClone(FIXTURE_PLAN);
+  maliciousPlan.title = '</title><script data-export-injection>window.__relayPwned = true</script>';
+  maliciousPlan.days[0].activities[0].title = '<img src=x onerror="window.__relayPwned=true">';
+  maliciousPlan.days[0].activities[0].map_url = "javascript:alert(1)";
+  writeFileSync(resolve(tempDir, "long-title.json"), JSON.stringify(longTitlePlan));
+  writeFileSync(resolve(tempDir, "malicious.json"), JSON.stringify(maliciousPlan));
+  for (const [planPath, outputPath] of [
+    [resolve(tempDir, "long-title.json"), longTitleExportPath],
+    [resolve(tempDir, "malicious.json"), maliciousExportPath],
+  ]) {
+    execFileSync(process.env.PYTHON || "python3", [resolve(TEST_DIR, "build_export_fixture.py"), planPath, outputPath], {
+      cwd: ROOT,
+      stdio: "inherit",
+    });
+  }
   await startFixtureServer();
 });
 
@@ -249,6 +278,7 @@ test("viewer loads official Gmarket Sans and switches Paris/Vienna state without
   await expect(page.locator(".guide-grid")).toHaveAttribute("data-destination-id", "austria");
   await expect(page.locator("#map-desk")).toHaveAttribute("data-destination-id", "austria");
   await expect(page.locator('[data-clock-zone="Europe/Vienna"]')).toHaveCount(1);
+  await expect(page.locator(".phrase-list")).not.toContainText("일치하는 기본 회화가 없습니다.");
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.body, "::before").backgroundImage)).toContain("austria.jpg");
 
   await page.getByRole("button", { name: "프랑스 파리 여행 도구와 배경 보기" }).click();
@@ -280,6 +310,10 @@ test("viewer and standalone export stay within 390/320px and keep visible action
   longTitlePlan.title = "초장문여행제목".repeat(40);
   await openViewer(page, longTitlePlan);
   await expect(page.locator(".cover h1")).toHaveText(longTitlePlan.title);
+  await expectNoHorizontalOverflow(page);
+
+  await page.goto(`${baseUrl}/export-long-title`, { waitUntil: "networkidle" });
+  await expect(page.locator("h1")).toHaveText(longTitlePlan.title);
   await expectNoHorizontalOverflow(page);
 
   expect(blockedRequests).toEqual([]);
@@ -338,6 +372,79 @@ test("offline mode is explicit and file export retains its saved FX snapshot", a
   expect(errors).toEqual([]);
 });
 
+test("viewer rejects invalid plan identity and regenerates official Google Maps fallback routes", async ({ context, page }) => {
+  const blockedRequests = await localRequestsOnly(context);
+  const errors = collectRuntimeErrors(page);
+  for (const [key, value] of [["plan_id", " "], ["revision", 0], ["revision", -1], ["revision", true], ["revision", 1.5], ["revision", "1"]]) {
+    const invalid = structuredClone(FIXTURE_PLAN);
+    invalid[key] = value;
+    await page.goto(`${baseUrl}/viewer#plan=${contentToken(invalid)}`, { waitUntil: "networkidle" });
+    await expect(page.locator(".loading")).toBeVisible();
+    await expect(page.locator(".cover")).toHaveCount(0);
+  }
+
+  const malformedPlans = [
+    (plan) => { plan.live_data.weather = []; },
+    (plan) => { plan.live_data.exchange.rates = [null]; },
+    (plan) => { plan.shorter_variant = { unexpected: true }; },
+    (plan) => { plan.days[0].legs = [null]; },
+  ];
+  for (const mutate of malformedPlans) {
+    const malformed = structuredClone(FIXTURE_PLAN);
+    mutate(malformed);
+    await page.goto(`${baseUrl}/viewer#plan=${contentToken(malformed)}`, { waitUntil: "networkidle" });
+    await expect(page.locator(".loading")).toBeVisible();
+    await expect(page.locator(".cover")).toHaveCount(0);
+  }
+
+  const fallback = structuredClone(FIXTURE_PLAN);
+  fallback.days.forEach((day) => {
+    day.route_map_url = "javascript:alert(1)";
+    day.legs = day.activities.slice(1).map(() => ({
+      route_urls: { transit: "javascript:alert(1)", walking: "javascript:alert(1)", driving: "javascript:alert(1)" },
+    }));
+  });
+  await openViewer(page, fallback);
+  const routes = await page.locator(".leg-links a").evaluateAll((links) => links.map((link) => link.href));
+  expect(routes).toHaveLength(6);
+  for (const [index, href] of routes.entries()) {
+    const url = new URL(href);
+    const day = fallback.days[Math.floor(index / 3)];
+    expect(url.origin).toBe("https://www.google.com");
+    expect(url.pathname).toBe("/maps/dir/");
+    expect(url.searchParams.get("api")).toBe("1");
+    expect(url.searchParams.get("origin")).toBe(day.activities[0].map_query);
+    expect(url.searchParams.get("destination")).toBe(day.activities[1].map_query);
+    expect(url.searchParams.get("travelmode")).toBe(["transit", "walking", "driving"][index % 3]);
+  }
+  expect(blockedRequests).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test("FX refresh error retains a snapshot and disables a calculator with no snapshot", async ({ context, page }) => {
+  const blockedRequests = await localRequestsOnly(context);
+  const errors = collectRuntimeErrors(page);
+  await openViewer(page);
+  await context.route("**/api/city-guide/paris", (route) => route.fulfill({
+    status: 503,
+    contentType: "application/json",
+    body: JSON.stringify({ ok: false, message: "fixture unavailable" }),
+  }));
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await expect(page.locator(".exchange-panel")).toHaveAttribute("data-exchange-state", "error");
+  await expect(page.locator("[data-rate-meta]")).toContainText("snapshot");
+  await expect(page.locator("[data-local-amount]")).toBeEnabled();
+
+  const noSnapshot = structuredClone(FIXTURE_PLAN);
+  noSnapshot.live_data.exchange.rates = [];
+  await openViewer(page, noSnapshot, { exchangeState: "error" });
+  await expect(page.locator("[data-rate-meta]")).toContainText("계산기를 비활성화");
+  await expect(page.locator("[data-local-amount]")).toBeDisabled();
+  expect(blockedRequests).toEqual([]);
+  expect(errors).toHaveLength(2);
+  expect(errors.every((entry) => entry.startsWith("console: Failed to load resource:") && entry.includes("503"))).toBe(true);
+});
+
 test("malicious content token remains inert text", async ({ context, page }) => {
   const blockedRequests = await localRequestsOnly(context);
   const errors = collectRuntimeErrors(page);
@@ -348,6 +455,11 @@ test("malicious content token remains inert text", async ({ context, page }) => 
 
   await expect(page.locator(".cover h1")).toHaveText(malicious.title);
   expect(await page.locator("[data-browser-injection]").count()).toBe(0);
+  expect(await page.locator(".stop-copy img").count()).toBe(0);
+  expect(await page.evaluate(() => window.__relayPwned)).toBeUndefined();
+
+  await page.goto(`${baseUrl}/export-malicious`, { waitUntil: "networkidle" });
+  expect(await page.locator("[data-export-injection]").count()).toBe(0);
   expect(await page.locator(".stop-copy img").count()).toBe(0);
   expect(await page.evaluate(() => window.__relayPwned)).toBeUndefined();
   expect(blockedRequests).toEqual([]);
