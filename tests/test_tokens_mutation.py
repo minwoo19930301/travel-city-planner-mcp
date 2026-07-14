@@ -1,4 +1,5 @@
 import asyncio
+import html as html_lib
 import re
 from urllib.parse import parse_qs, urlsplit
 
@@ -335,3 +336,52 @@ def test_standalone_export_escapes_copy_and_rebuilds_unsafe_links() -> None:
         asset_base_url='https://assets.example.test/"></style><script id="asset-injected">',
     )
     assert "asset-injected" not in asset_attack
+
+    mismatched = make_plan(service)
+    first_day = mismatched["days"][0]
+    wrong_directions = (
+        "https://www.google.com/maps/dir/?api=1&origin=WRONG+ORIGIN"
+        "&destination=WRONG+DESTINATION&travelmode=transit"
+    )
+    wrong_search = "https://www.google.com/maps/search/?api=1&query=WRONG+PLACE"
+    first_day["route_map_url"] = wrong_directions
+    first_day["activities"][0]["map_url"] = wrong_search
+    for route_urls in (leg["route_urls"] for leg in first_day["legs"]):
+        for mode in route_urls:
+            route_urls[mode] = wrong_directions
+
+    mismatched_export = render_export_html(mismatched, service.catalog)
+    hrefs = [
+        html_lib.unescape(value)
+        for value in re.findall(r'href="([^"]+)"', mismatched_export)
+    ]
+    assert not any("WRONG" in href for href in hrefs)
+    map_queries = [
+        parse_qs(urlsplit(href).query)
+        for href in hrefs
+        if urlsplit(href).path == "/maps/search/"
+    ]
+    assert {
+        "api": ["1"],
+        "query": [first_day["activities"][0]["map_query"]],
+    } in map_queries
+    actual_directions = {
+        (
+            params.get("origin", [None])[0],
+            params.get("destination", [None])[0],
+            params.get("travelmode", [None])[0],
+        )
+        for href in hrefs
+        if urlsplit(href).path == "/maps/dir/"
+        for params in [parse_qs(urlsplit(href).query)]
+    }
+    expected_directions = {
+        (
+            first_day["activities"][index]["map_query"],
+            first_day["activities"][index + 1]["map_query"],
+            mode,
+        )
+        for index in range(len(first_day["activities"]) - 1)
+        for mode in ("transit", "walking", "driving")
+    }
+    assert expected_directions <= actual_directions

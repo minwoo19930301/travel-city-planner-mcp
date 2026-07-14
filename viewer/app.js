@@ -102,6 +102,39 @@ function safeGoogleMapsUrl(value) {
   }
 }
 
+function hasExactSearchParams(parsed, expected) {
+  const expectedEntries = Object.entries(expected);
+  const actualKeys = [...parsed.searchParams.keys()];
+  return (
+    actualKeys.length === expectedEntries.length
+    && expectedEntries.every(([key, value]) => {
+      const values = parsed.searchParams.getAll(key);
+      return values.length === 1 && values[0] === value;
+    })
+  );
+}
+
+function safeMapSearchUrl(value, query) {
+  const safe = safeGoogleMapsUrl(value);
+  if (!safe) return "";
+  const parsed = new URL(safe);
+  if (parsed.pathname !== "/maps/search/" || parsed.hash) return "";
+  return hasExactSearchParams(parsed, { api: "1", query }) ? parsed.href : "";
+}
+
+function safeDirectionsUrl(value, origin, destination, travelmode) {
+  const safe = safeGoogleMapsUrl(value);
+  if (!safe) return "";
+  const parsed = new URL(safe);
+  if (parsed.pathname !== "/maps/dir/" || parsed.hash) return "";
+  return hasExactSearchParams(parsed, {
+    api: "1",
+    origin,
+    destination,
+    travelmode,
+  }) ? parsed.href : "";
+}
+
 function planTokenFromLocation() {
   const params = new URLSearchParams(location.hash.replace(/^#/, ""));
   return params.get("plan") || "";
@@ -187,7 +220,8 @@ function dayRouteUrl(activities) {
 }
 
 function activityMapUrl(activity) {
-  return safeGoogleMapsUrl(activity?.map_url) || mapsSearchUrl(routeQuery(activity));
+  const query = routeQuery(activity);
+  return safeMapSearchUrl(activity?.map_url, query) || mapsSearchUrl(query);
 }
 
 function routeQuery(activity) {
@@ -637,7 +671,8 @@ function renderLeg(fromActivity, toActivity, leg = {}) {
     ["DRIVE", leg.driving_url || leg.route_urls?.driving || leg.routes?.driving || directionsUrl(from, to, "driving")],
   ];
   options.forEach(([name, rawUrl]) => {
-    const url = safeGoogleMapsUrl(rawUrl) || directionsUrl(from, to, name === "WALK" ? "walking" : name === "DRIVE" ? "driving" : "transit");
+    const mode = name === "WALK" ? "walking" : name === "DRIVE" ? "driving" : "transit";
+    const url = safeDirectionsUrl(rawUrl, from, to, mode) || directionsUrl(from, to, mode);
     const link = element(url ? "a" : "span", "", name);
     if (url) {
       link.href = url;
@@ -666,7 +701,7 @@ function renderItinerary(plan) {
       const next = day.activities[index + 1];
       if (next) stops.append(renderLeg(activity, next, (day.legs || day.route_legs || [])[index]));
     });
-    const routeUrl = safeGoogleMapsUrl(day.route_map_url) || dayRouteUrl(day.activities);
+    const routeUrl = dayRouteUrl(day.activities);
     const route = element(routeUrl ? "a" : "span", "route-link", routeUrl ? "OPEN DAY ROUTE" : "ROUTE UNAVAILABLE");
     if (routeUrl) {
       route.href = routeUrl;

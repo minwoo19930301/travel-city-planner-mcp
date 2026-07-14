@@ -65,6 +65,8 @@ def test_viewer_exposes_live_clocks_phrases_exchange_and_leg_routes() -> None:
     assert "showMapPreview(cityMapSelection(plan, destinationId), false)" in script
     assert "AbortController" in script
     assert "function safeGoogleMapsUrl" in script
+    assert "function safeMapSearchUrl" in script
+    assert "function safeDirectionsUrl" in script
     assert 'parsed.hostname !== "www.google.com"' in script
     assert "function dayRouteUrl" in script
     assert "catalog?.destinationCount !== 69" in script

@@ -398,10 +398,13 @@ test("viewer rejects invalid plan identity and regenerates official Google Maps 
   }
 
   const fallback = structuredClone(FIXTURE_PLAN);
+  const wrongDirectionUrl = "https://www.google.com/maps/dir/?api=1&origin=WRONG+ORIGIN&destination=WRONG+DESTINATION&travelmode=transit";
+  const wrongSearchUrl = "https://www.google.com/maps/search/?api=1&query=WRONG+PLACE";
   fallback.days.forEach((day) => {
-    day.route_map_url = "javascript:alert(1)";
+    day.route_map_url = wrongDirectionUrl;
+    day.activities.forEach((activity) => { activity.map_url = wrongSearchUrl; });
     day.legs = day.activities.slice(1).map(() => ({
-      route_urls: { transit: "javascript:alert(1)", walking: "javascript:alert(1)", driving: "javascript:alert(1)" },
+      route_urls: { transit: wrongDirectionUrl, walking: wrongDirectionUrl, driving: wrongDirectionUrl },
     }));
   });
   await openViewer(page, fallback);
@@ -417,6 +420,29 @@ test("viewer rejects invalid plan identity and regenerates official Google Maps 
     expect(url.searchParams.get("destination")).toBe(day.activities[1].map_query);
     expect(url.searchParams.get("travelmode")).toBe(["transit", "walking", "driving"][index % 3]);
   }
+
+  const activities = fallback.days.flatMap((day) => day.activities);
+  const mapUrls = await page.locator(".map-link").evaluateAll((links) => links.map((link) => link.href));
+  expect(mapUrls).toHaveLength(activities.length);
+  for (const [index, href] of mapUrls.entries()) {
+    const url = new URL(href);
+    expect(url.pathname).toBe("/maps/search/");
+    expect(url.searchParams.get("api")).toBe("1");
+    expect(url.searchParams.get("query")).toBe(activities[index].map_query);
+  }
+
+  const dayRouteUrls = await page.locator(".route-link").evaluateAll((links) => links.map((link) => link.href));
+  expect(dayRouteUrls).toHaveLength(fallback.days.length);
+  for (const [index, href] of dayRouteUrls.entries()) {
+    const url = new URL(href);
+    const day = fallback.days[index];
+    expect(url.pathname).toBe("/maps/dir/");
+    expect(url.searchParams.get("api")).toBe("1");
+    expect(url.searchParams.get("origin")).toBe(day.activities[0].map_query);
+    expect(url.searchParams.get("destination")).toBe(day.activities.at(-1).map_query);
+    expect(url.searchParams.get("travelmode")).toBe("transit");
+  }
+  expect([...routes, ...mapUrls, ...dayRouteUrls].some((href) => href.includes("WRONG"))).toBe(false);
   expect(blockedRequests).toEqual([]);
   expect(errors).toEqual([]);
 });

@@ -6,7 +6,7 @@ import re
 from base64 import b64encode
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 from .catalog import Catalog
 from .tokens import encode_legacy_v3
@@ -112,6 +112,38 @@ def _safe_google_maps_url(value: Any) -> str | None:
     return text
 
 
+def _validated_google_map_search_url(value: Any, query: str) -> str | None:
+    safe = _safe_google_maps_url(value)
+    if not safe:
+        return None
+    parsed = urlsplit(safe)
+    expected = {"api": ["1"], "query": [query]}
+    if parsed.path != "/maps/search/" or parsed.fragment:
+        return None
+    return safe if parse_qs(parsed.query, keep_blank_values=True) == expected else None
+
+
+def _validated_google_directions_url(
+    value: Any,
+    origin: str,
+    destination: str,
+    mode: str,
+) -> str | None:
+    safe = _safe_google_maps_url(value)
+    if not safe:
+        return None
+    parsed = urlsplit(safe)
+    expected = {
+        "api": ["1"],
+        "origin": [origin],
+        "destination": [destination],
+        "travelmode": [mode],
+    }
+    if parsed.path != "/maps/dir/" or parsed.fragment:
+        return None
+    return safe if parse_qs(parsed.query, keep_blank_values=True) == expected else None
+
+
 def _safe_asset_url(asset_base_url: str, relative_path: Any) -> str:
     """Build an image URL while rejecting executable or credential-bearing bases."""
     relative = str(relative_path or "").strip().lstrip("/")
@@ -206,7 +238,12 @@ def _route_options_for_leg(
 
     routes: dict[str, str] = {}
     for mode in TRAVEL_MODES:
-        safe_url = _safe_google_maps_url(backend_routes.get(mode))
+        safe_url = _validated_google_directions_url(
+            backend_routes.get(mode),
+            origin_query,
+            destination_query,
+            mode,
+        )
         routes[mode] = safe_url or _google_directions_url(
             origin_query,
             destination_query,
@@ -391,7 +428,10 @@ def render_export_html(
         activities = day["activities"]
         activity_rows = []
         for index, activity in enumerate(activities):
-            map_url = _safe_google_maps_url(activity.get("map_url"))
+            map_url = _validated_google_map_search_url(
+                activity.get("map_url"),
+                _activity_query(activity),
+            )
             map_url = map_url or _google_map_search_url(_activity_query(activity))
             activity_rows.append(
                 """
@@ -439,8 +479,7 @@ def render_export_html(
                     """
                 )
 
-        route_url = _safe_google_maps_url(day.get("route_map_url"))
-        route_url = route_url or _whole_day_route_url(activities)
+        route_url = _whole_day_route_url(activities)
         route_link = (
             f'<a class="route" href="{esc(route_url, quote=True)}" target="_blank" '
             'rel="noopener noreferrer">이 날의 전체 동선</a>'
