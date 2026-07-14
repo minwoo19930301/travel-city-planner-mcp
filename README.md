@@ -4,7 +4,18 @@
 
 `도쿄로 4-5박 정도 머무를 건데 애니와 맛집 위주로 추천 플래너 짜줘`처럼 말하면 5박 6일 기본안과 4박 5일 단축 힌트가 즉시 나옵니다. 날짜가 없을 때 현재 날씨를 여행 날짜의 날씨처럼 표시하지 않습니다. 결과 viewer에는 선택 도시의 이미지, 서울·현지 실시간 시계, 최신 KRW 환율, 도시별 기본 회화, 장소별 지도와 인접 장소 사이 이동 경로가 함께 표시됩니다.
 
+도시 사진을 전체 화면 배경으로 쓰고 단색 dark matte만 얹은 fieldnote UI입니다. G마켓 산스 Light·Medium·Bold를 저장소에 직접 포함해 viewer와 독립 HTML export가 같은 글꼴과 밀도를 유지합니다.
+
+![파리와 빈 멀티시티 데스크톱 데모](docs/previews/travel-paris-vienna-desktop.jpg)
+
+<details>
+<summary>모바일 viewer와 독립 HTML export 보기</summary>
+
 ![파리와 빈 멀티시티 모바일 데모](docs/previews/travel-paris-vienna-live.jpg)
+
+![파리와 빈 독립 HTML export](docs/previews/travel-export-paris.jpg)
+
+</details>
 
 ## 핵심 구조
 
@@ -39,6 +50,7 @@
 - **최신 환율:** 일정 생성 시와 viewer 재오픈 시 `open.er-api.com`에서 `현지 통화 1단위 → KRW`를 조회하고 viewer가 15분마다 새로 확인합니다. 조회시각·제공처 갱신시각·실패 상태를 구분하며, API 제공값보다 더 실시간인 것처럼 꾸미지 않습니다. 양방향 금액 계산기도 포함합니다.
 - **기본 번역/회화:** 원본에 있던 도시별 251개 표현을 현지어·발음·한국어 뜻으로 표시하고 검색합니다. 임의 문장을 번역했다고 추측하지 않습니다.
 - **지도와 이동:** 각 장소의 Google Maps 검색, 하루 전체 route, 모든 인접 장소 A→B의 `transit`·`walking`·`driving` 링크를 제공합니다. 거리·소요시간·운행 여부는 임의 생성하지 않고 링크를 여는 시점의 Google Maps 결과로 확인합니다.
+- **도시 전환:** 멀티시티 버튼을 누르면 전체 배경, 도시 요약, 현지 시계, 환율, 회화, 지도 목적지가 한 번에 같은 도시로 전환됩니다. 도시명이나 예시 인물명은 코드에 고정하지 않습니다.
 
 공식 [Google Maps URLs](https://developers.google.com/maps/documentation/urls/get-started)는 API key 없이 검색과 길찾기를 열 수 있습니다. 화면 안 공식 Google Maps Embed API는 별도 key가 필요하므로 이 프로젝트는 공개 key를 묶지 않고 공식 외부 경로 링크를 기본값으로 사용합니다.
 
@@ -107,6 +119,24 @@ docker run --rm -p 8000:8000 -e PUBLIC_BASE_URL=http://localhost:8000 travel-cit
 
 `scripts/smoke_mcp.py`는 임의의 로컬 포트에서 실제 Streamable HTTP 서버를 띄워 initialize/listTools/callTool, 알 수 없는 Host 거부, 비도쿄 도시 guide, 기본 회화, 세 이동수단 경로, 도쿄 4-5박 생성, token 복원, revision 충돌, HTML·legacy export, viewer·catalog·live guide 경로까지 왕복 검증합니다.
 
+## Relay10 하네스
+
+저장소 루트의 `relay10.config.json`이 scout → architect → maker → reviewer → explainer 역할, 위험도 기반 모델·reasoning 라우팅, 최대 모델 호출 수, deterministic Reader-10 명료도 검사, 테스트·MCP smoke 검증을 고정합니다. `.relay10/` 실행 기록은 로컬에만 남고 설정은 버전 관리합니다.
+
+```bash
+git clone https://github.com/minwoo19930301/relay10
+cd relay10 && npm link
+cd /path/to/travel-city-planner-mcp
+
+r10 doctor
+PYTHON=.venv/bin/python r10 route "사진 배경 여행 viewer와 export를 최종 검증" --json
+PYTHON=.venv/bin/python r10 run "사진 배경 여행 viewer와 export를 최종 검증" \
+  --budget-calls 5 \
+  --allow-verification-commands
+```
+
+Reader-10 점수는 문서의 명료도 검사이며 기능·보안의 진실 판정으로 쓰지 않습니다. 최종 통과 여부는 reviewer 판정과 pytest, JavaScript 구문 검사, 실제 MCP Streamable HTTP smoke를 함께 봅니다.
+
 ## 공유 호환 규격
 
 새 viewer는 `tp1.<base64url(zlib(JSON))>` content token을 사용합니다. plan schema v1에는 `plan_id`, `revision`, `segments`, `days`, 활동의 `location`/`map_query`, 인접 활동별 `legs`, live-data 상태가 포함됩니다. 초기 배포에서 발급한 `legs` 없는 v1 token도 열 때 결정적으로 보완하므로 계속 사용할 수 있습니다.
@@ -130,6 +160,7 @@ docker run --rm -p 8000:8000 -e PUBLIC_BASE_URL=http://localhost:8000 travel-cit
 - 원본의 69개 목적지, 672개 활동 템플릿, 문구, 색상, 시간대, 통화, hero 참조를 `data/destinations.json`에 보존했습니다.
 - `scripts/import_legacy_catalog.mjs <path-to-original-app.js>`는 원본 JS 데이터에서 canonical JSON을 다시 만드는 감사용 도구입니다.
 - hero 이미지는 원본 저장소에서 변경 없이 가져왔습니다. 파일별 EXIF 기반 저작자 단서와 재사용 시 주의사항은 [ASSET_CREDITS.md](ASSET_CREDITS.md)를 확인하세요. 원본 저장소의 라이선스가 제3자 이미지 권리까지 대신 보증하지는 않습니다.
+- G마켓 산스 WOFF2 세 굵기는 G마켓 공식 배포본이며 SIL Open Font License 1.1 전문을 `LICENSES/GmarketSans-OFL-1.1.txt`에 함께 보존했습니다. 파일 출처와 SHA-256은 [ASSET_CREDITS.md](ASSET_CREDITS.md)에 기록했습니다.
 
 viewer가 별도 복사본을 갖지 않으며 실행 시 서버의 `/data/destinations.json`을 그대로 읽습니다.
 

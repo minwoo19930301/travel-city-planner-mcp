@@ -13,6 +13,9 @@ let currentPlan;
 let activeDestinationId = "";
 let clockTimer;
 let liveRefreshTimer;
+let guideRequest;
+let guideContent;
+let cityButtons = [];
 const MAX_TOKEN_CHARS = 350_000;
 const MAX_PLAN_BYTES = 2_000_000;
 const LIVE_REFRESH_MS = 15 * 60 * 1000;
@@ -96,6 +99,11 @@ function directionsUrl(origin, destination, travelmode = "transit") {
   return `https://www.google.com/maps/dir/?${params}`;
 }
 
+function mapsSearchUrl(query) {
+  const params = new URLSearchParams({ api: "1", query });
+  return `https://www.google.com/maps/search/?${params}`;
+}
+
 function routeQuery(activity) {
   return String(activity.map_query || activity.location || activity.title || "").trim();
 }
@@ -109,6 +117,12 @@ function setTheme(destination) {
     ? [0, 2, 4].map((index) => parseInt(hex.slice(index, index + 2), 16)).join(", ")
     : "212, 73, 40";
   root.style.setProperty("--accent-rgb", rgb);
+  root.style.setProperty("--hero-image", `url("/viewer/${destination.heroImage}")`);
+  root.dataset.activeDestination = destination.id;
+}
+
+function reducedMotion() {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
 function showNotice(message) {
@@ -150,18 +164,14 @@ function exchangeSummary(exchange) {
 
 function renderCover(plan, firstDestination) {
   const cover = element("section", "cover");
-  const imageWrap = element("div", "cover-image");
-  const image = document.createElement("img");
-  image.src = `/viewer/${firstDestination.heroImage}`;
-  image.alt = `${firstDestination.cityKo} 여행 풍경`;
-  imageWrap.append(image, element("span", "", `${firstDestination.countryKo} / ${firstDestination.city}`));
-
   const copy = element("div", "cover-copy");
   const upper = element("div");
+  const summary = element("p", "cover-summary", firstDestination.summary);
+  summary.dataset.activeCitySummary = "";
   upper.append(
     element("p", "kicker", `PLAN ${plan.plan_id.toUpperCase()} · REV ${plan.revision}`),
     element("h1", "", plan.title),
-    element("p", "cover-summary", firstDestination.summary),
+    summary,
   );
   const facts = element("div", "cover-facts");
   const dateValue = plan.segments[0]?.start_date
@@ -178,25 +188,26 @@ function renderCover(plan, firstDestination) {
     facts.append(row);
   });
   copy.append(upper, facts);
-  cover.append(imageWrap, copy);
+  cover.append(copy);
   return cover;
 }
 
 function renderSegments(plan) {
-  const board = element("section", "segment-board");
+  const board = element("nav", "segment-board");
+  board.setAttribute("aria-label", "여정 도시 선택");
   plan.segments.forEach((segment, index) => {
     const destination = destinationFor(segment.destination_id);
     const row = element("div", "segment-row");
-    row.append(element("div", "segment-code", `SEG ${String(index + 1).padStart(2, "0")}`));
-    const image = document.createElement("img");
-    image.className = "segment-thumb";
-    image.src = `/viewer/${destination.heroImage}`;
-    image.alt = `${destination.cityKo} 풍경`;
     const city = element("div", "segment-city");
-    city.append(element("strong", "", segment.city_ko), element("span", "", `${segment.country_ko} · ${segment.city}`));
-    const duration = element("div", "segment-duration");
-    duration.append(`${segment.nights} NIGHTS`, document.createElement("br"), `DAY ${segment.day_start}—${segment.day_end}`);
-    row.append(image, city, duration);
+    const button = element("button", "", segment.city_ko);
+    button.type = "button";
+    button.dataset.destinationId = segment.destination_id;
+    button.setAttribute("aria-pressed", "false");
+    button.setAttribute("aria-label", `${segment.country_ko} ${segment.city_ko} 여행 도구와 배경 보기`);
+    button.addEventListener("click", () => setActiveDestination(plan, button.dataset.destinationId));
+    city.append(button, element("span", "", `${segment.country_ko} · ${segment.city}`));
+    row.append(city);
+    cityButtons.push({ id: segment.destination_id, button });
     board.append(row);
   });
   return board;
@@ -348,8 +359,10 @@ function renderPhrasePanel(destination) {
 }
 
 async function refreshCityGuide(destinationId, panel) {
+  guideRequest?.abort();
+  guideRequest = new AbortController();
   try {
-    const response = await fetch(`/api/city-guide/${encodeURIComponent(destinationId)}`, { cache: "no-store" });
+    const response = await fetch(`/api/city-guide/${encodeURIComponent(destinationId)}`, { cache: "no-store", signal: guideRequest.signal });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const payload = await response.json();
     if (!payload.ok) throw new Error(payload.message || "city guide unavailable");
@@ -358,17 +371,17 @@ async function refreshCityGuide(destinationId, panel) {
     const rate = Number.isFinite(exchange.krw_per_unit)
       ? exchange
       : (exchange.rates || []).find((item) => item.currency === destination.currency.code);
-    setExchangeRate(panel, destination, rate?.krw_per_unit, rate || exchange);
+    if (destinationId === activeDestinationId) setExchangeRate(panel, destination, rate?.krw_per_unit, rate || exchange);
   } catch (error) {
+    if (error.name === "AbortError") return;
     const meta = panel.querySelector("[data-rate-meta]");
     if (meta) meta.textContent = `자동 새로고침 실패 · 저장된 값 유지 (${error.message})`;
   }
 }
 
 function renderGuideContent(plan, destinationId, content) {
-  activeDestinationId = destinationId;
   const destination = destinationFor(destinationId);
-  setTheme(destination);
+  content.dataset.destinationId = destinationId;
   const clockPanel = element("section", "guide-panel clock-panel");
   clockPanel.append(
     element("span", "panel-label", "LIVE CLOCKS"),
@@ -383,40 +396,53 @@ function renderGuideContent(plan, destinationId, content) {
   window.clearInterval(liveRefreshTimer);
   clockTimer = window.setInterval(updateClocks, 1000);
   refreshCityGuide(destinationId, exchangePanel);
-  liveRefreshTimer = window.setInterval(() => refreshCityGuide(activeDestinationId, exchangePanel), LIVE_REFRESH_MS);
+  liveRefreshTimer = window.setInterval(() => refreshCityGuide(destinationId, exchangePanel), LIVE_REFRESH_MS);
+}
+
+function cityMapSelection(plan, destinationId) {
+  const activity = plan.days
+    .flatMap((day) => day.activities)
+    .find((item) => item.destination_id === destinationId);
+  if (activity) return activity;
+  const destination = destinationFor(destinationId);
+  const query = `${destination.city}, ${destination.country}`;
+  return {
+    destination_id: destinationId,
+    title: `${destination.cityKo} 도시 지도`,
+    location: `${destination.countryKo} · ${destination.city}`,
+    map_url: mapsSearchUrl(query),
+  };
+}
+
+function setActiveDestination(plan, destinationId) {
+  activeDestinationId = destinationId;
+  const destination = destinationFor(destinationId);
+  setTheme(destination);
+  const summary = document.querySelector("[data-active-city-summary]");
+  if (summary) summary.textContent = destination.summary;
+  cityButtons.forEach(({ id, button }) => button.setAttribute("aria-pressed", String(id === destinationId)));
+  if (guideContent) renderGuideContent(plan, destinationId, guideContent);
+  showMapPreview(cityMapSelection(plan, destinationId), false);
 }
 
 function renderTravelDesk(plan) {
   const desk = element("section", "travel-desk");
   const header = element("header", "desk-head");
-  header.append(element("h2", "", "여행 도구"), element("span", "", "LIVE / LOCAL / ROUTE"));
-  const tabs = element("div", "city-tabs");
+  header.append(element("h2", "", "현지 필드노트"), element("span", "", "선택한 도시의 시각, 환율, 회화를 한곳에서 확인하세요."));
   const content = element("div", "guide-grid");
-  const ids = uniqueDestinationIds(plan);
-  ids.forEach((destinationId, index) => {
-    const destination = destinationFor(destinationId);
-    const button = element("button", index === 0 ? "active" : "", destination.cityKo);
-    button.type = "button";
-    button.addEventListener("click", () => {
-      tabs.querySelectorAll("button").forEach((item) => item.classList.toggle("active", item === button));
-      renderGuideContent(plan, destinationId, content);
-      const firstCityActivity = plan.days
-        .flatMap((day) => day.activities)
-        .find((activity) => activity.destination_id === destinationId);
-      if (firstCityActivity) showMapPreview(firstCityActivity, false);
-    });
-    tabs.append(button);
-  });
-  desk.append(header, tabs, content);
-  renderGuideContent(plan, ids[0], content);
+  desk.append(header, content);
+  guideContent = content;
+  if (!activeDestinationId) setActiveDestination(plan, uniqueDestinationIds(plan)[0]);
   return desk;
 }
 
 function showMapPreview(activity, shouldScroll = true) {
+  const desk = document.getElementById("map-desk");
   const title = document.querySelector("[data-map-title]");
   const locationText = document.querySelector("[data-map-location]");
   const open = document.querySelector("[data-map-open]");
   if (!title || !locationText || !open) return;
+  if (desk) desk.dataset.destinationId = activity.destination_id || activeDestinationId;
   title.textContent = activity.title;
   locationText.textContent = activity.location || routeQuery(activity);
   const url = safeHttpUrl(activity.map_url);
@@ -427,13 +453,15 @@ function showMapPreview(activity, shouldScroll = true) {
     open.removeAttribute("href");
     open.setAttribute("aria-disabled", "true");
   }
-  if (shouldScroll) document.getElementById("map-desk")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  if (shouldScroll) document.getElementById("map-desk")?.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth", block: "center" });
 }
 
 function renderMapDesk(plan) {
-  const first = plan.days.flatMap((day) => day.activities)[0];
+  const destinationId = activeDestinationId || uniqueDestinationIds(plan)[0];
+  const first = cityMapSelection(plan, destinationId);
   const desk = element("section", "map-desk");
   desk.id = "map-desk";
+  desk.dataset.destinationId = destinationId;
   const copy = element("div");
   copy.append(element("span", "panel-label", "LIVE MAP"));
   const title = element("h2", "", first?.title || "장소를 선택하세요");
@@ -541,17 +569,13 @@ function renderItinerary(plan) {
   return fragment;
 }
 
-function renderSource(plan) {
-  const panel = element("details", "source-panel");
-  panel.append(element("summary", "", "PLAN DATA / JSON"));
-  const pre = element("pre", "", JSON.stringify(plan, null, 2));
-  panel.append(pre);
-  return panel;
-}
-
 function renderPlan(plan, { demo = false } = {}) {
   window.clearInterval(clockTimer);
   window.clearInterval(liveRefreshTimer);
+  guideRequest?.abort();
+  cityButtons = [];
+  guideContent = undefined;
+  activeDestinationId = "";
   currentPlan = plan;
   const firstDestination = destinationFor(plan.segments[0].destination_id);
   setTheme(firstDestination);
@@ -564,7 +588,7 @@ function renderPlan(plan, { demo = false } = {}) {
     note.append(element("b", "", "SHORTER OPTION"), document.createTextNode(plan.shorter_variant.hint));
     app.append(note);
   }
-  app.append(renderItinerary(plan), renderSource(plan));
+  app.append(renderItinerary(plan));
   showNotice(demo ? "FICTIONAL DEMO · MCP content token을 열면 이 자리에 실제 일정이 표시됩니다." : "");
 }
 
@@ -592,8 +616,8 @@ async function bootstrap() {
 copyButton.addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText(location.href);
-    copyButton.textContent = "COPIED";
-    window.setTimeout(() => { copyButton.textContent = "LINK COPY"; }, 1400);
+    copyButton.textContent = "복사됨";
+    window.setTimeout(() => { copyButton.textContent = "링크 복사"; }, 1400);
   } catch {
     showNotice("주소 복사가 차단되었습니다. 주소창의 링크를 직접 복사해 주세요.");
   }
@@ -610,7 +634,7 @@ tokenForm.addEventListener("submit", async (event) => {
     history.replaceState({}, "", `#plan=${token}`);
     renderPlan(plan);
     dialog.close();
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: reducedMotion() ? "auto" : "smooth" });
   } catch (error) {
     tokenError.textContent = error.message;
   }

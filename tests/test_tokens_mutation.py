@@ -1,4 +1,5 @@
 import asyncio
+import re
 
 import pytest
 
@@ -143,8 +144,10 @@ def test_standalone_export_includes_each_city_live_clock_fx_phrases_and_legs() -
 
     export = render_export_html(plan, service.catalog)
 
-    assert "/viewer/assets/heroes/tokyo.jpg" in export
-    assert "/viewer/assets/heroes/taipei.jpg" in export
+    assert "data:image/jpeg;base64," in export
+    assert "data:font/woff2;base64," in export
+    assert "Gmarket" in export
+    assert export.count("<style>") == 1
     assert 'data-time-zone="Asia/Seoul"' in export
     assert 'data-time-zone="Asia/Tokyo"' in export
     assert 'data-time-zone="Asia/Taipei"' in export
@@ -159,6 +162,37 @@ def test_standalone_export_includes_each_city_live_clock_fx_phrases_and_legs() -
     assert "travelmode=transit" in export
     assert "travelmode=walking" in export
     assert "travelmode=driving" in export
+    assert "data-city-select" in export
+    assert "phrase-search" in export
+    assert "fx-calculator" in export
+    assert 'class="clock-row" data-city-id="tokyo"' in export
+    assert 'class="clock-row" data-city-id="taipei"' in export
+    assert 'data-fx-row data-city-id="tokyo"' in export
+    assert 'data-fx-row data-city-id="taipei"' in export
+    assert 'data-fx-refresh-status' in export
+    assert '.clock-row[data-city-id],.fx-row[data-city-id]' in export
+    assert 'body:before{z-index:0;pointer-events:none}' in export
+    assert 'body:after{z-index:1;pointer-events:none}' in export
+    assert 'main{position:relative;z-index:2}' in export
+    assert 'body:after{background:rgba(5,8,5,.8)}' in export
+    assert 'h1{max-width:13ch;overflow-wrap:normal;word-break:keep-all}' in export
+    assert 'background:var(--control-bg);color:var(--control-text)' in export
+    assert 'data-active-city-summary' in export
+    assert 'summary.textContent = citySummary.textContent' in export
+    assert 'valueNode.textContent = formatRate' in export
+    assert 'metaNode.textContent =' in export
+    assert '독립 HTML(file://)에서는 환율 실시간 갱신을 사용할 수 없습니다.' in export
+    assert '저장된 snapshot을 유지합니다.' in export
+
+    embedded_heroes = re.findall(
+        r"data:image/jpeg;base64,[A-Za-z0-9+/=]+",
+        export,
+    )
+    assert len(embedded_heroes) == 2
+    assert len(set(embedded_heroes)) == 2
+    assert all(export.count(hero) == 1 for hero in embedded_heroes)
+    assert '<img src="data:image/jpeg;base64,' not in export
+    assert 'data-hero="data:image/jpeg;base64,' not in export
 
 
 def test_standalone_export_escapes_copy_and_rebuilds_unsafe_links() -> None:
@@ -180,3 +214,10 @@ def test_standalone_export_escapes_copy_and_rebuilds_unsafe_links() -> None:
     assert 'src="javascript:' not in export
     assert "https://www.google.com/maps/search/?" in export
     assert "https://www.google.com/maps/dir/?" in export
+
+    asset_attack = render_export_html(
+        plan,
+        service.catalog,
+        asset_base_url='https://assets.example.test/"></style><script id="asset-injected">',
+    )
+    assert "asset-injected" not in asset_attack

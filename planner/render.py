@@ -3,6 +3,8 @@ from __future__ import annotations
 import html
 import json
 import re
+from base64 import b64encode
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode, urlsplit
 
@@ -16,6 +18,30 @@ MODE_LABELS = {
     "walking": "도보",
     "driving": "차량",
 }
+ROOT = Path(__file__).resolve().parents[1]
+VIEWER_ROOT = ROOT / "viewer"
+
+
+def _local_asset_data_uri(relative_path: Any) -> str:
+    """Embed only checked-in viewer files for the default portable export."""
+    relative = str(relative_path or "").strip().lstrip("/")
+    if not relative or _has_control_characters(relative) or any(part == ".." for part in relative.split("/")):
+        return ""
+    path = (VIEWER_ROOT / relative).resolve()
+    try:
+        path.relative_to(VIEWER_ROOT.resolve())
+    except ValueError:
+        return ""
+    media_type = {".jpg": "image/jpeg", ".woff2": "font/woff2"}.get(path.suffix.lower())
+    if not media_type or not path.is_file():
+        return ""
+    return f"data:{media_type};base64,{b64encode(path.read_bytes()).decode('ascii')}"
+
+
+def _export_asset(asset_base_url: str, relative_path: Any) -> str:
+    if asset_base_url == "/viewer/":
+        return _local_asset_data_uri(relative_path)
+    return _safe_asset_url(asset_base_url, relative_path)
 
 
 def legacy_v3_payload(plan: dict[str, Any]) -> dict[str, Any]:
@@ -94,7 +120,9 @@ def _safe_asset_url(asset_base_url: str, relative_path: Any) -> str:
 
     base = str(asset_base_url or "").strip().rstrip("/")
     candidate = f"{base}/{relative}" if base else relative
-    if _has_control_characters(candidate):
+    if _has_control_characters(candidate) or any(
+        character in candidate for character in {'"', "'", "<", ">", "\\"}
+    ):
         return ""
     parsed = urlsplit(candidate)
     if parsed.scheme:
@@ -195,6 +223,18 @@ def _format_rate(rate: dict[str, Any]) -> str:
     return f"1 {currency} = ₩{formatted}"
 
 
+def _json_for_html_script(value: Any) -> str:
+    """Serialize inert JSON without allowing an embedded script end tag."""
+    return (
+        json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+        .replace("&", "\\u0026")
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("\u2028", "\\u2028")
+        .replace("\u2029", "\\u2029")
+    )
+
+
 def render_export_html(
     plan: dict[str, Any],
     catalog: Catalog,
@@ -203,7 +243,9 @@ def render_export_html(
     esc = lambda value, quote=False: html.escape(str(value), quote=quote)
     first_destination = catalog.get(plan["segments"][0]["destination_id"])
     accent = _safe_hex(first_destination.get("accent"))
-    hero = _safe_asset_url(asset_base_url, first_destination["heroImage"])
+    font_light = _export_asset(asset_base_url, "assets/fonts/GmarketSansLight.woff2")
+    font_medium = _export_asset(asset_base_url, "assets/fonts/GmarketSansMedium.woff2")
+    font_bold = _export_asset(asset_base_url, "assets/fonts/GmarketSansBold.woff2")
 
     first_start = plan["segments"][0].get("start_date")
     last_end = plan["segments"][-1].get("end_date")
@@ -244,6 +286,8 @@ def render_export_html(
     ]
     destination_cards = []
     phrase_sections = []
+    city_index_buttons = []
+    hero_assets: dict[str, str] = {}
     for index, (segment, destination) in enumerate(destination_rows, start=1):
         city_name = str(destination["cityKo"])
         time_zone = str(destination["timeZone"])
@@ -251,10 +295,11 @@ def render_export_html(
         city_map_url = _google_map_search_url(
             f"{destination['city']}, {destination['country']}"
         )
-        city_hero = _safe_asset_url(asset_base_url, destination["heroImage"])
+        city_hero = _export_asset(asset_base_url, destination["heroImage"])
+        hero_assets[str(destination["id"])] = city_hero
         clock_rows.append(
             f"""
-            <div class="clock-row">
+            <div class="clock-row" data-city-id="{esc(destination['id'], quote=True)}">
               <span>{esc(destination['countryKo'])} · {esc(city_name)}</span>
               <time data-live-clock data-time-zone="{esc(time_zone, quote=True)}">시간 계산 중</time>
               <small>{esc(time_zone)}</small>
@@ -262,18 +307,18 @@ def render_export_html(
             """
         )
         rate = rate_by_currency.get(currency.upper())
+        city_index_buttons.append(
+            f'<button type="button" data-city-select="{esc(destination["id"], quote=True)}" aria-pressed="false">{esc(city_name)}</button>'
+        )
         rate_summary = _format_rate(rate) if rate else f"{currency} · 조회하지 않음"
         destination_cards.append(
             f"""
-            <article class="destination-card">
-              <a class="city-photo" href="{esc(city_map_url, quote=True)}" target="_blank" rel="noopener noreferrer">
-                <img src="{esc(city_hero, quote=True)}" alt="{esc(city_name)} 도시 이미지" loading="lazy">
-                <span>GOOGLE MAPS에서 도시 열기</span>
-              </a>
+            <article class="destination-card" data-city-id="{esc(destination['id'], quote=True)}" data-currency="{esc(currency, quote=True)}" data-rate="{esc(rate.get('krw_per_unit') if rate else '', quote=True)}">
               <div class="city-copy">
                 <div class="city-index">CITY {index:02d} / {esc(destination['countryKo'])}</div>
                 <h2>{esc(city_name)} <i>{esc(destination['city'])}</i></h2>
                 <p>{esc(destination['summary'])}</p>
+                <a class="city-map-link" href="{esc(city_map_url, quote=True)}" target="_blank" rel="noopener noreferrer">GOOGLE MAPS에서 도시 열기</a>
                 <dl>
                   <div><dt>구간</dt><dd>DAY {esc(segment['day_start'])}—{esc(segment['day_end'])}</dd></div>
                   <div><dt>통화</dt><dd>{esc(rate_summary)}</dd></div>
@@ -297,7 +342,7 @@ def render_export_html(
             )
         phrase_sections.append(
             f"""
-            <article class="phrase-city">
+            <article class="phrase-city" data-city-id="{esc(destination['id'], quote=True)}">
               <header><b>{esc(city_name)}</b><span>{esc(destination.get('phraseLabel') or '기본 회화')}</span></header>
               <ul>{''.join(phrase_rows)}</ul>
             </article>
@@ -318,20 +363,20 @@ def render_export_html(
             )
             exchange_cards.append(
                 f"""
-                <div class="fx-row">
+                <div class="fx-row" data-fx-row data-city-id="{esc(destination['id'], quote=True)}" data-snapshot-at="{esc(timestamp, quote=True)}">
                   <span>{esc(destination['cityKo'])} · {esc(currency)}</span>
-                  <strong>{esc(_format_rate(rate))}</strong>
-                  <small>{esc(rate.get('status') or exchange.get('status') or 'unknown')} · {esc(timestamp)}</small>
+                  <strong data-fx-value>{esc(_format_rate(rate))}</strong>
+                  <small data-fx-meta>{esc(rate.get('status') or exchange.get('status') or 'unknown')} · {esc(timestamp)}</small>
                 </div>
                 """
             )
         else:
             exchange_cards.append(
                 f"""
-                <div class="fx-row">
+                <div class="fx-row" data-fx-row data-city-id="{esc(destination['id'], quote=True)}" data-snapshot-at="없음">
                   <span>{esc(destination['cityKo'])} · {esc(currency)}</span>
-                  <strong>환율 snapshot 없음</strong>
-                  <small>include_live_data=true로 계획을 다시 생성하면 조회합니다.</small>
+                  <strong data-fx-value>환율 snapshot 없음</strong>
+                  <small data-fx-meta>include_live_data=true로 계획을 다시 생성하면 조회합니다.</small>
                 </div>
                 """
             )
@@ -415,6 +460,7 @@ def render_export_html(
     compact_plan = html.escape(
         json.dumps(plan, ensure_ascii=False, separators=(",", ":")), quote=False
     )
+    hero_assets_json = _json_for_html_script(hero_assets)
     return f"""<!doctype html>
 <html lang="ko">
 <head>
@@ -422,81 +468,33 @@ def render_export_html(
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{esc(plan['title'])}</title>
 <style>
-:root{{--ink:#101410;--paper:#f2f1ea;--line:#c9c8bf;--accent:{accent};--muted:#64675f;--wash:#e5e4dc}}
-*{{box-sizing:border-box}}
-body{{margin:0;background:var(--ink);color:var(--ink);font-family:"IBM Plex Sans KR","Apple SD Gothic Neo",sans-serif}}
-main{{width:min(100%,880px);margin:auto;background:var(--paper);min-height:100vh}}
-.cover{{display:grid;grid-template-columns:42% 58%;border-bottom:8px solid var(--accent)}}
-.cover img{{width:100%;height:100%;min-height:300px;object-fit:cover;filter:saturate(.76) contrast(1.04)}}
-.intro{{padding:28px 24px;display:flex;flex-direction:column;justify-content:space-between}}
-.eyebrow,.facts,code,time,.route,.city-index,.clock-row,.fx-row,.leg,.destination-card dt,.phrase-city header{{font-family:"IBM Plex Mono",monospace}}
-.eyebrow{{font-size:11px;letter-spacing:.16em;text-transform:uppercase}}
-h1{{font-size:clamp(34px,8vw,62px);line-height:.96;margin:20px 0;letter-spacing:-.05em}}
-.facts{{font-size:12px;line-height:1.8;border-top:1px solid;padding-top:12px}}
-.operations{{display:grid;grid-template-columns:1fr 1fr;background:var(--ink);color:var(--paper);border-bottom:1px solid #353a35}}
-.operations>section{{padding:22px 24px}}.operations>section+section{{border-left:1px solid #353a35}}
-.section-label{{margin:0 0 16px;font:10px/1.2 "IBM Plex Mono",monospace;letter-spacing:.17em;color:var(--muted)}}
-.operations .section-label{{color:#aeb3aa}}
-.clock-row,.fx-row{{display:grid;grid-template-columns:1fr auto;gap:3px 14px;padding:10px 0;border-top:1px solid #353a35}}
-.clock-row span,.fx-row span{{font-size:10px;color:#aeb3aa}}.clock-row time,.fx-row strong{{font-size:14px;font-weight:700}}
-.clock-row small,.fx-row small{{grid-column:1/-1;font-size:9px;color:#858b82;overflow-wrap:anywhere}}
-.destination-index{{padding:28px 24px 4px}}
-.destination-card{{display:grid;grid-template-columns:minmax(210px,37%) 1fr;border-top:1px solid var(--ink);padding:16px 0 24px}}
-.city-photo{{position:relative;display:block;min-height:176px;color:white;background:var(--ink);overflow:hidden}}
-.city-photo img{{width:100%;height:100%;position:absolute;inset:0;object-fit:cover;filter:saturate(.78) contrast(1.05)}}
-.city-photo span{{position:absolute;left:10px;bottom:9px;background:var(--ink);padding:5px 7px;font:9px/1 "IBM Plex Mono",monospace;letter-spacing:.08em}}
-.city-copy{{padding:1px 0 0 22px}}.city-index{{font-size:9px;letter-spacing:.12em;color:var(--muted)}}
-.city-copy h2{{font-size:28px;margin:9px 0 8px;line-height:1}}.city-copy h2 i{{font:12px/1 "IBM Plex Mono",monospace;color:var(--muted)}}
-.city-copy p{{font-size:13px;line-height:1.55;margin:0 0 16px;max-width:54ch}}
-.city-copy dl{{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:0}}
-.city-copy dl div{{border-top:1px solid var(--line);padding-top:7px;min-width:0}}.city-copy dt{{font-size:8px;color:var(--muted);text-transform:uppercase}}
-.city-copy dd{{font-size:10px;margin:4px 0 0;overflow-wrap:anywhere}}
-.phrase-guide{{padding:24px;background:var(--wash);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}}
-.phrase-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}}
-.phrase-city header{{display:flex;justify-content:space-between;border-bottom:2px solid var(--ink);padding-bottom:8px;font-size:10px}}
-.phrase-city ul{{list-style:none;padding:0;margin:0}}.phrase-city li{{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.8fr);gap:2px 10px;border-bottom:1px solid var(--line);padding:9px 0}}
-.phrase-city li strong{{font-size:13px}}.phrase-city li span{{font-size:10px;text-align:right;color:var(--muted)}}.phrase-city li small{{grid-column:1/-1;font-size:10px;color:var(--muted)}}
-.day{{display:grid;grid-template-columns:132px 1fr;border-bottom:1px solid var(--line);padding:24px}}
-.day>header{{padding-right:18px}}.day>header b,.day>header span{{display:block;font:11px/1.5 "IBM Plex Mono",monospace}}
-.day h2{{font-size:20px;line-height:1.1;margin:12px 0}}
-ol{{list-style:none;margin:0;padding:0}}
-.stop{{display:grid;grid-template-columns:58px 1fr 38px;gap:10px;border-top:1px solid var(--line);padding:14px 0}}
-.stop time{{font-size:12px;font-weight:700}}.stop strong,.stop span,.stop small{{display:block}}
-.stop span{{font-size:13px;margin-top:3px}}.stop small{{color:var(--muted);font-size:11px;margin-top:5px}}
-.stop a,.route{{font-size:10px;color:var(--ink);font-weight:700;text-decoration-thickness:2px}}
-.leg{{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:-3px 0 10px 58px;padding:8px 10px;background:var(--wash);font-size:9px}}
-.leg>span{{overflow-wrap:anywhere}}.leg nav{{display:flex;gap:4px;flex:none}}.leg a{{color:var(--ink);border:1px solid var(--line);padding:4px 5px;text-decoration:none}}
-.leg a.suggested{{border-color:var(--ink);background:var(--ink);color:var(--paper)}}
-.route{{display:inline-block;margin:16px 0 0 58px}}
-footer{{padding:22px 24px 40px;font-size:11px;color:var(--muted)}}
-code{{word-break:break-all}}
-@media(max-width:680px){{
-  .cover{{grid-template-columns:1fr}}.cover img{{height:38vh;min-height:220px}}.operations{{grid-template-columns:1fr}}.operations>section+section{{border-left:0;border-top:1px solid #353a35}}
-  .destination-card{{grid-template-columns:1fr}}.city-photo{{min-height:210px}}.city-copy{{padding:16px 0 0}}.city-copy dl{{grid-template-columns:1fr 1fr}}
-  .phrase-grid{{grid-template-columns:1fr}}.day{{grid-template-columns:1fr;padding:22px 18px}}.day>header{{padding:0 0 14px}}
-  .leg{{align-items:flex-start;flex-direction:column;margin-left:0}}.leg nav{{width:100%;display:grid;grid-template-columns:repeat(3,1fr)}}.leg a{{text-align:center}}.route{{margin-left:0}}
-}}
+@font-face{{font-family:Gmarket;src:url("{font_light}") format("woff2");font-weight:300}}@font-face{{font-family:Gmarket;src:url("{font_medium}") format("woff2");font-weight:500}}@font-face{{font-family:Gmarket;src:url("{font_bold}") format("woff2");font-weight:700}}
+:root{{--paper:#f8f7f1;--muted:#c7cdc3;--line:rgba(248,247,241,.28);--accent:{accent};--hero:none}}*{{box-sizing:border-box}}html,body{{margin:0;min-width:320px;background:#111611;color:var(--paper);font-family:Gmarket,"Apple SD Gothic Neo",sans-serif;font-weight:500;font-variant-numeric:tabular-nums;overflow-x:hidden}}body:before,body:after{{content:"";position:fixed;inset:0;z-index:-2;background:#111611 var(--hero) center/cover no-repeat}}body:after{{z-index:-1;background:linear-gradient(90deg,rgba(6,9,6,.87),rgba(7,10,7,.74) 60%,rgba(7,10,7,.84))}}button,input{{font:inherit;font-variant-numeric:tabular-nums}}button{{min-height:44px;cursor:pointer}}a{{color:inherit;text-underline-offset:.22em}}:focus-visible{{outline:3px solid #fff;outline-offset:3px}}main{{width:min(1180px,calc(100% - 32px));margin:auto;padding:clamp(38px,8vw,95px) 0 60px}}.cover{{max-width:850px;padding-bottom:76px;border-bottom:1px solid var(--line)}}.eyebrow,.section-label,.city-index,.facts,.day>header b,.day>header span,footer{{font-size:11px;letter-spacing:.1em;color:var(--muted)}}h1{{max-width:11ch;margin:16px 0;font-size:clamp(48px,8vw,100px);line-height:.98;letter-spacing:-.065em}}.intro p{{max-width:48ch;font-size:18px;font-weight:300;line-height:1.7}}.facts{{padding-top:12px;border-top:1px solid var(--line);line-height:1.9}}.operations{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:clamp(28px,6vw,84px);padding:54px 0;border-bottom:1px solid var(--line)}}.operations>section{{min-width:0}}.section-label{{margin:0 0 16px}}.clock-row,.fx-row{{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 14px;padding:12px 0;border-top:1px solid var(--line)}}.clock-row[data-city-id],.fx-row[data-city-id]{{display:none}}.clock-row.active,.fx-row.active{{display:grid}}.clock-row span,.fx-row span{{font-size:13px}}.clock-row time,.fx-row strong{{font-size:18px;font-weight:700}}.clock-row small,.fx-row small{{grid-column:1/-1;color:var(--muted);font-size:11px;overflow-wrap:anywhere}}.fx-refresh-note{{min-height:2.8em;margin:0 0 8px;color:var(--muted);font-size:11px;line-height:1.4}}.fx-refresh-note[data-state=error],.fx-refresh-note[data-state=offline]{{color:#ffd0bd}}.fx-calculator{{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}}.fx-calculator input{{width:100%;min-height:44px;border:1px solid var(--line);background:rgba(5,8,5,.55);color:var(--paper);padding:10px}}.destination-index{{padding:54px 0 0}}.city-selector{{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 24px}}.city-selector button{{border:1px solid var(--line);background:rgba(5,8,5,.35);color:var(--paper);padding:8px 13px}}.city-selector button[aria-pressed=true]{{border-color:var(--accent);background:var(--accent);color:#111611;font-weight:700}}.destination-card{{display:none;border-top:1px solid var(--line);padding:22px 0 34px}}.destination-card.active{{display:block}}.city-copy{{min-width:0}}.city-copy h2{{margin:7px 0;font-size:38px;letter-spacing:-.045em}}.city-copy h2 i{{color:var(--muted);font-size:15px;font-style:normal}}.city-copy p{{max-width:52ch;line-height:1.65}}.city-map-link{{display:inline-block;margin:1px 0 20px;font-size:11px;font-weight:700}}.city-copy dl{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}}.city-copy dl div{{min-width:0;padding-top:8px;border-top:1px solid var(--line)}}.city-copy dt{{color:var(--muted);font-size:11px}}.city-copy dd{{margin:5px 0 0;font-size:12px;overflow-wrap:anywhere}}.phrase-guide{{padding:38px 0;border-bottom:1px solid var(--line)}}.phrase-search{{width:min(100%,360px);min-height:44px;border:1px solid var(--line);background:rgba(5,8,5,.55);color:var(--paper);padding:10px;margin-bottom:14px}}.phrase-city{{display:none}}.phrase-city.active{{display:block}}.phrase-city header{{display:flex;justify-content:space-between;padding-bottom:9px;border-bottom:1px solid var(--line)}}.phrase-city ul,ol{{margin:0;padding:0;list-style:none}}.phrase-city li{{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.8fr);gap:3px 12px;padding:11px 0;border-bottom:1px solid var(--line)}}.phrase-city li span,.phrase-city li small{{color:var(--muted);font-size:12px}}.phrase-city li small{{grid-column:1/-1}}.day{{display:grid;grid-template-columns:155px minmax(0,1fr);gap:clamp(24px,4vw,62px);padding:28px 0;border-bottom:1px solid var(--line)}}.day h2{{margin:15px 0 0;font-size:23px;line-height:1.3}}.stop{{display:grid;grid-template-columns:56px minmax(0,1fr) 42px;gap:12px;padding:11px 0}}.stop time{{font-weight:700}}.stop strong,.stop span,.stop small{{display:block;overflow-wrap:anywhere}}.stop span,.stop small{{margin-top:3px;color:var(--muted);font-size:13px}}.stop a,.route{{font-size:11px;font-weight:700}}.leg{{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;margin:3px 0 8px 68px;padding:10px 0;border-top:1px solid var(--line);color:var(--muted);font-size:12px}}.leg nav{{display:flex;gap:10px}}.leg a{{color:var(--paper);font-size:11px}}.route{{display:inline-block;margin:14px 0 0 68px}}footer{{padding:28px 0 0;line-height:1.7}}footer details{{display:none}}@media(max-width:680px){{main{{width:min(100% - 24px,1180px);padding-top:50px}}h1{{font-size:clamp(46px,15vw,66px)}}.operations{{grid-template-columns:1fr}}.day{{grid-template-columns:1fr;gap:13px}}.city-copy dl{{grid-template-columns:1fr 1fr}}.phrase-city li{{grid-template-columns:1fr;gap:3px}}.phrase-city li small{{grid-column:auto}}.leg{{grid-template-columns:1fr;margin-left:0}}.route{{margin-left:0}}}}@media(prefers-reduced-motion:reduce){{*,*:before,*:after{{animation-duration:0s!important;transition-duration:0s!important;scroll-behavior:auto!important}}}}
+body{{position:relative;isolation:isolate;min-height:100vh}}body:before{{z-index:0;pointer-events:none}}body:after{{z-index:1;pointer-events:none}}main{{position:relative;z-index:2}}
+:root{{--control-bg:#f8f7f1;--control-text:#080b08}}body:after{{background:rgba(5,8,5,.8)}}h1{{max-width:13ch;overflow-wrap:normal;word-break:keep-all}}.city-selector button[aria-pressed=true]{{border-color:var(--accent);background:var(--control-bg);color:var(--control-text);box-shadow:inset 0 -3px 0 var(--accent)}}@media(max-width:680px){{h1{{max-width:100%;font-size:clamp(38px,12.5vw,58px)}}}}
 </style>
 </head>
 <body><main>
 <section class="cover">
-  <img src="{esc(hero, quote=True)}" alt="{esc(first_destination['cityKo'])}">
   <div class="intro">
-    <div><div class="eyebrow">ROUTE / 69 · REV {esc(plan['revision'])}</div><h1>{esc(plan['title'])}</h1><p>{esc(first_destination['summary'])}</p></div>
+    <div><div class="eyebrow">ROUTE / 69 · REV {esc(plan['revision'])}</div><h1>{esc(plan['title'])}</h1><p data-active-city-summary>{esc(first_destination['summary'])}</p></div>
     <div class="facts">DATE {esc(date_label)}<br>WEATHER {esc(weather_label)}<br>PACE {esc(str(plan['pace']).upper())}</div>
   </div>
 </section>
 <section class="operations" aria-label="여행 실시간 정보">
   <section><h2 class="section-label">LIVE CLOCKS · 1초마다 기기에서 갱신</h2>{''.join(clock_rows)}</section>
-  <section><h2 class="section-label">FX SNAPSHOT · KRW 기준</h2>{''.join(exchange_cards)}</section>
+  <section><h2 class="section-label">FX SNAPSHOT · KRW 기준</h2><p class="fx-refresh-note" data-fx-refresh-status data-state="snapshot" role="status" aria-live="polite">저장된 snapshot을 먼저 표시합니다. 서버 연결 시 최신값을 확인합니다.</p>{''.join(exchange_cards)}<div class="fx-calculator"><input data-local-amount type="number" inputmode="decimal" value="100" aria-label="현지 통화 금액"><input data-krw-amount type="number" inputmode="numeric" aria-label="원화 금액"></div></section>
 </section>
-<section class="destination-index"><h2 class="section-label">DESTINATION INDEX · 도시별 이미지와 정보</h2>{''.join(destination_cards)}</section>
-<section class="phrase-guide"><h2 class="section-label">POCKET PHRASES · 도시별 기본 회화</h2><div class="phrase-grid">{''.join(phrase_sections)}</div></section>
+<section class="destination-index"><h2 class="section-label">DESTINATION INDEX · 도시별 이미지와 정보</h2><nav class="city-selector" aria-label="여행 도시 선택">{''.join(city_index_buttons)}</nav>{''.join(destination_cards)}</section>
+<section class="phrase-guide"><h2 class="section-label">POCKET PHRASES · 도시별 기본 회화</h2><input class="phrase-search" type="search" placeholder="한국어 의미·현지어·발음 검색" aria-label="기본 회화 검색"><div class="phrase-grid">{''.join(phrase_sections)}</div></section>
 {''.join(day_sections)}
-<footer>환율은 계획 생성 시점 snapshot이며 결제 전 재확인하세요. 경로 링크는 Google Maps에서 실시간 운행·소요시간을 확인합니다.<br>Canonical catalog {esc(plan['catalog']['digest'])} · Plan {esc(plan['plan_id'])}<details><summary>JSON</summary><code>{compact_plan}</code></details></footer>
+<footer>환율은 저장된 snapshot에서 시작해 서버 연결 시 최신값을 확인하며, 결제 전에는 다시 확인하세요. 경로 링크는 Google Maps에서 실시간 운행·소요시간을 확인합니다.<br>Canonical catalog {esc(plan['catalog']['digest'])} · Plan {esc(plan['plan_id'])}<details><summary>JSON</summary><code>{compact_plan}</code></details></footer>
 </main>
+<script type="application/json" id="city-hero-assets">{hero_assets_json}</script>
 <script>
 (function () {{
+  let heroAssets = {{}};
+  try {{ heroAssets = JSON.parse(document.getElementById("city-hero-assets")?.textContent || "{{}}"); }} catch (error) {{ /* a missing background never blocks the itinerary */ }}
   const formatters = new Map();
   function updateClocks() {{
     const now = new Date();
@@ -527,6 +525,92 @@ code{{word-break:break-all}}
   }}
   updateClocks();
   window.setInterval(updateClocks, 1000);
+  const localAmount = document.querySelector("[data-local-amount]");
+  const krwAmount = document.querySelector("[data-krw-amount]");
+  const refreshStatus = document.querySelector("[data-fx-refresh-status]");
+  let activeRate = 0;
+  function setRefreshStatus(message, state) {{
+    refreshStatus.textContent = message;
+    refreshStatus.dataset.state = state;
+  }}
+  function formatRate(currency, value) {{
+    const formatted = new Intl.NumberFormat("ko-KR", {{ maximumFractionDigits: 4 }}).format(value);
+    return `1 ${{currency}} = ₩${{formatted}}`;
+  }}
+  function calculateFromLocal() {{
+    if (activeRate > 0) krwAmount.value = String(Math.round(Number(localAmount.value || 0) * activeRate));
+  }}
+  function calculateFromKrw() {{
+    if (activeRate > 0) localAmount.value = String(Math.round((Number(krwAmount.value || 0) / activeRate) * 100) / 100);
+  }}
+  localAmount.addEventListener("input", calculateFromLocal);
+  krwAmount.addEventListener("input", calculateFromKrw);
+  function selectCity(id) {{
+    const card = document.querySelector(`.destination-card[data-city-id="${{CSS.escape(id)}}"]`);
+    if (!card) return;
+    document.querySelectorAll("[data-city-select]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.citySelect === id)));
+    document.querySelectorAll(".destination-card,.phrase-city,.clock-row[data-city-id],.fx-row[data-city-id]").forEach((node) => node.classList.toggle("active", node.dataset.cityId === id));
+    const hero = heroAssets[id];
+    if (hero) document.body.style.setProperty("--hero", `url(${{JSON.stringify(hero)}})`);
+    else document.body.style.removeProperty("--hero");
+    const summary = document.querySelector("[data-active-city-summary]");
+    const citySummary = card.querySelector(".city-copy p");
+    if (summary && citySummary) summary.textContent = citySummary.textContent;
+    activeRate = Number(card.dataset.rate) || 0;
+    localAmount.disabled = !activeRate;
+    krwAmount.disabled = !activeRate;
+    calculateFromLocal();
+    if (location.protocol === "file:") {{
+      setRefreshStatus("독립 HTML(file://)에서는 환율 실시간 갱신을 사용할 수 없습니다. 저장된 snapshot을 표시합니다.", "offline");
+    }} else if (!navigator.onLine) {{
+      setRefreshStatus("오프라인입니다. 저장된 snapshot을 유지합니다.", "offline");
+    }} else {{
+      refreshRate(id, card);
+    }}
+  }}
+  async function refreshRate(id, card) {{
+    const row = document.querySelector(`.fx-row[data-city-id="${{CSS.escape(id)}}"]`);
+    const valueNode = row?.querySelector("[data-fx-value]");
+    const metaNode = row?.querySelector("[data-fx-meta]");
+    const attemptedAt = new Date().toISOString();
+    if (card.classList.contains("active")) setRefreshStatus(`${{id}} 환율을 갱신하는 중입니다…`, "loading");
+    try {{
+      const response = await fetch(`/api/city-guide/${{encodeURIComponent(id)}}`, {{ cache: "no-store" }});
+      const payload = await response.json();
+      if (!response.ok) throw new Error(`HTTP ${{response.status}}`);
+      const exchange = payload.exchange || {{}};
+      const matchedRate = (exchange.rates || []).find((item) => item.currency === card.dataset.currency);
+      const nextRate = matchedRate || exchange;
+      const rate = Number(nextRate.krw_per_unit);
+      if (!(rate > 0)) throw new Error(nextRate.message || "환율 값이 없습니다.");
+      const timestamp = nextRate.updated_at || nextRate.fetched_at || attemptedAt;
+      const source = nextRate.source ? ` · ${{nextRate.source}}` : "";
+      card.dataset.rate = String(rate);
+      row.dataset.snapshotAt = timestamp;
+      row.dataset.refreshState = "live";
+      valueNode.textContent = formatRate(card.dataset.currency, rate);
+      metaNode.textContent = `${{nextRate.status || "live"}} · ${{timestamp}}${{source}}`;
+      if (card.classList.contains("active")) {{
+        activeRate = rate;
+        calculateFromLocal();
+        setRefreshStatus(`${{id}} 환율 갱신 완료 · ${{timestamp}}`, "live");
+      }}
+    }} catch (error) {{
+      if (row) row.dataset.refreshState = navigator.onLine ? "error" : "offline";
+      if (metaNode) metaNode.textContent = `${{navigator.onLine ? "갱신 실패" : "오프라인"}} · snapshot ${{row?.dataset.snapshotAt || "없음"}} 유지 · 시도 ${{attemptedAt}}`;
+      if (card.classList.contains("active")) setRefreshStatus(`${{navigator.onLine ? "환율 갱신에 실패했습니다" : "오프라인입니다"}}. 저장된 snapshot을 유지합니다.`, navigator.onLine ? "error" : "offline");
+    }}
+  }}
+  document.querySelectorAll("[data-city-select]").forEach((button) => button.addEventListener("click", () => selectCity(button.dataset.citySelect)));
+  const phraseSearch = document.querySelector(".phrase-search");
+  phraseSearch.addEventListener("input", () => {{
+    const query = phraseSearch.value.trim().toLocaleLowerCase("ko-KR");
+    document.querySelectorAll(".phrase-city.active li").forEach((row) => row.hidden = query && !row.textContent.toLocaleLowerCase("ko-KR").includes(query));
+  }});
+  selectCity(document.querySelector("[data-city-select]")?.dataset.citySelect);
+  window.setInterval(() => {{ const active = document.querySelector(".destination-card.active"); if (active && location.protocol !== "file:") refreshRate(active.dataset.cityId, active); }}, 15 * 60 * 1000);
+  window.addEventListener("offline", () => setRefreshStatus("오프라인입니다. 저장된 snapshot을 유지합니다.", "offline"));
+  window.addEventListener("online", () => {{ const active = document.querySelector(".destination-card.active"); if (active && location.protocol !== "file:") refreshRate(active.dataset.cityId, active); }});
 }}());
 </script>
 </body></html>"""

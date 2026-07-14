@@ -19,6 +19,13 @@ def test_canonical_catalog_has_all_69_destinations_and_assets() -> None:
         assert (ROOT / "viewer" / destination["heroImage"]).is_file()
 
 
+def test_official_gmarket_sans_assets_and_license_are_checked_in() -> None:
+    font_dir = ROOT / "viewer" / "assets" / "fonts"
+    for weight in ("Light", "Medium", "Bold"):
+        assert (font_dir / f"GmarketSans{weight}.woff2").is_file()
+    assert (ROOT / "LICENSES" / "GmarketSans-OFL-1.1.txt").is_file()
+
+
 def test_catalog_search_uses_korean_and_region_aliases() -> None:
     catalog = Catalog()
     assert catalog.search("도쿄")[0]["id"] == "tokyo"

@@ -6,9 +6,9 @@
   <meta name="theme-color" content="#101410">
   <meta name="description" content="69개 원본 도시 템플릿으로 만든 공유 여행 일정">
   <title>Route / 69 — Travel City Planner</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="preload" href="/viewer/assets/fonts/GmarketSansLight.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/viewer/assets/fonts/GmarketSansMedium.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/viewer/assets/fonts/GmarketSansBold.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/viewer/styles.css">
   <script src="/viewer/app.js" defer></script>
 </head>
@@ -16,15 +16,15 @@
   <header class="site-bar">
     <a class="wordmark" href="/viewer" aria-label="Route 69 데모 열기">ROUTE / 69</a>
     <div class="site-actions">
-      <button id="copy-link" type="button">LINK COPY</button>
-      <button id="open-loader" type="button">TOKEN OPEN</button>
+      <button id="copy-link" type="button">링크 복사</button>
+      <button id="open-loader" type="button">일정 열기</button>
     </div>
   </header>
 
   <div id="notice" class="notice" role="status" aria-live="polite"></div>
   <main id="app" class="shell" aria-busy="true">
     <section class="loading">
-      <span>CATALOG 69</span>
+      <span>ROUTE / 69</span>
       <strong>여행 데이터를 복원하는 중입니다.</strong>
     </section>
   </main>
@@ -33,7 +33,7 @@
     <form id="token-form" method="dialog">
       <header>
         <span>CONTENT TOKEN</span>
-        <button type="button" id="close-loader" aria-label="닫기">CLOSE</button>
+        <button type="button" id="close-loader" aria-label="닫기">닫기</button>
       </header>
       <label for="token-input">MCP가 반환한 <code>tp1.</code> 토큰</label>
       <textarea id="token-input" rows="8" spellcheck="false" required></textarea>
@@ -44,7 +44,7 @@
 
   <footer class="site-footer">
     <span>CANONICAL DATA · TOUR CITY PLANNER</span>
-    <a href="https://github.com/minwoo19930301/tour-city-planner" target="_blank" rel="noreferrer">ORIGINAL SOURCE</a>
+    <a href="https://github.com/minwoo19930301/tour-city-planner" target="_blank" rel="noreferrer">원본 보기</a>
   </footer>
 </body>
 </html>
