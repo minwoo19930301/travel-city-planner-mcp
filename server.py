@@ -46,21 +46,45 @@ def _csv_env(name: str) -> list[str]:
 _public_url = urlparse(PUBLIC_BASE_URL)
 _public_host = _public_url.netloc
 _public_origin = f"{_public_url.scheme}://{_public_url.netloc}" if _public_url.scheme and _public_url.netloc else ""
+# PlayMCP in KC serves on *.playmcp-endpoint.kakaocloud.io.
+# Default DNS-rebinding allowlist is localhost-only, which makes /mcp return
+# "Invalid Host header" (HTTP 421) and PlayMCP shows zero tools.
+# Remote public MCP on Kakao Cloud must accept the endpoint Host header.
+_extra_hosts = _csv_env("ALLOWED_HOSTS")
+_extra_origins = _csv_env("ALLOWED_ORIGINS")
+_kc_hosts = [
+    "travel-city-planner-mcp.playmcp-endpoint.kakaocloud.io",
+    "*.playmcp-endpoint.kakaocloud.io",
+    "playmcp-endpoint.kakaocloud.io",
+]
+_kc_origins = [
+    "https://playmcp.kakao.com",
+    "https://*.playmcp.kakao.com",
+    "https://*.playmcp-endpoint.kakaocloud.io",
+]
+_disable_rebinding = os.environ.get("DISABLE_DNS_REBINDING", "true").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 TRANSPORT_SECURITY = TransportSecuritySettings(
-    enable_dns_rebinding_protection=True,
+    enable_dns_rebinding_protection=not _disable_rebinding,
     allowed_hosts=[
         "127.0.0.1:*",
         "localhost:*",
         "[::1]:*",
         *([_public_host] if _public_host else []),
-        *_csv_env("ALLOWED_HOSTS"),
+        *_kc_hosts,
+        *_extra_hosts,
     ],
     allowed_origins=[
         "http://127.0.0.1:*",
         "http://localhost:*",
         "http://[::1]:*",
         *([_public_origin] if _public_origin else []),
-        *_csv_env("ALLOWED_ORIGINS"),
+        *_kc_origins,
+        *_extra_origins,
     ],
 )
 
