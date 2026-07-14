@@ -1,0 +1,71 @@
+{
+  "status": "pass",
+  "passed": true,
+  "authorized": true,
+  "checks": [
+    {
+      "name": "git diff --check",
+      "passed": true,
+      "detail": "exit=0",
+      "command": {
+        "command": "git",
+        "args": [
+          "diff",
+          "--check"
+        ]
+      },
+      "index": 0
+    },
+    {
+      "name": "node --check viewer/app.js",
+      "passed": true,
+      "detail": "exit=0",
+      "command": {
+        "command": "node",
+        "args": [
+          "--check",
+          "viewer/app.js"
+        ]
+      },
+      "index": 1
+    },
+    {
+      "name": "../.venv/bin/python -m pytest",
+      "passed": true,
+      "detail": "exit=0\n........................................................                 [100%]\n56 passed in 0.38s\n",
+      "command": {
+        "command": "../.venv/bin/python",
+        "args": [
+          "-m",
+          "pytest"
+        ]
+      },
+      "index": 2
+    },
+    {
+      "name": "../.venv/bin/python scripts/smoke_mcp.py",
+      "passed": true,
+      "detail": "exit=0\nPASS travel MCP Streamable HTTP smoke (http://127.0.0.1:60504)\n",
+      "command": {
+        "command": "../.venv/bin/python",
+        "args": [
+          "scripts/smoke_mcp.py"
+        ]
+      },
+      "index": 3
+    },
+    {
+      "name": "npm run test:browser",
+      "passed": true,
+      "detail": "exit=0\n\n> test:browser\n> playwright test --config=tests/browser/playwright.config.mjs\n\n\nRunning 7 tests using 1 worker\n\n\n\n[1/7] tests/browser/browser-gate.spec.mjs:260:1 › viewer loads official Gmarket Sans and switches Paris/Vienna state without runtime errors\n[2/7] tests/browser/browser-gate.spec.mjs:293:1 › viewer and standalone export stay within 390/320px and keep visible actions at least 44px high\n[3/7] tests/browser/browser-gate.spec.mjs:323:1 › standalone export loads embedded Gmarket assets, clocks, and city-specific background/content\n[4/7] tests/browser/browser-gate.spec.mjs:350:1 › offline mode is explicit and file export retains its saved FX snapshot\n[5/7] tests/browser/browser-gate.spec.mjs:375:1 › viewer rejects invalid plan identity and regenerates official Google Maps fallback routes\n[6/7] tests/browser/browser-gate.spec.mjs:450:1 › FX refresh error retains a snapshot and disables a calculator with no snapshot\n[7/7] tests/browser/browser-gate.spec.mjs:474:1 › malicious content token remains inert text\n  7 passed (13.7s)\n\n(node:40226) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n",
+      "command": {
+        "command": "npm",
+        "args": [
+          "run",
+          "test:browser"
+        ]
+      },
+      "index": 4
+    }
+  ]
+}

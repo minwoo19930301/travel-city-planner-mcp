@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+  <title>Relay10 실행 보고서</title>
+  <style>
+    :root { color-scheme: light dark; --bg:#f5f6f8; --panel:#fff; --text:#17202a; --muted:#5d6876; --line:#dfe3e8; --accent:#315efb; --pass:#16794b; --fail:#b42318; --warn:#8a5700; --info:#52606d; --code:#101828; }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR",sans-serif; font-size:16px; line-height:1.7; overflow-wrap:anywhere; }
+    a { color:var(--accent); text-underline-offset:.18em; }
+    a:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
+    .skip-link { position:absolute; top:-4rem; left:1rem; z-index:20; padding:.65rem 1rem; background:var(--panel); color:var(--text); border:2px solid var(--accent); }
+    .skip-link:focus { top:1rem; }
+    .shell { width:min(100% - 2rem, 1100px); margin-inline:auto; }
+    .hero { padding:4rem 0 2rem; background:linear-gradient(135deg,#111827,#243b73); color:#fff; }
+    .eyebrow { margin:0 0 .35rem; color:inherit; font-size:.78rem; font-weight:800; letter-spacing:.08em; text-transform:uppercase; opacity:.78; }
+    h1,h2,h3 { line-height:1.25; letter-spacing:-.02em; }
+    h1 { margin:.2rem 0 .7rem; font-size:clamp(2rem,5vw,3.6rem); }
+    h2 { margin:0 0 1rem; font-size:clamp(1.45rem,3vw,2rem); }
+    h3 { margin:.1rem 0 .55rem; font-size:1.08rem; }
+    .hero-summary { max-width:72ch; font-size:1.08rem; }
+    .meta { display:flex; flex-wrap:wrap; gap:.75rem 1.3rem; margin-top:1.3rem; align-items:center; }
+    .meta span, .meta time { color:#d9e2f2; }
+    nav { position:sticky; top:0; z-index:10; background:color-mix(in srgb,var(--panel) 94%,transparent); border-bottom:1px solid var(--line); backdrop-filter:blur(10px); }
+    nav ul { display:flex; gap:.35rem; margin:0; padding:.65rem 0; list-style:none; overflow-x:auto; }
+    nav a { display:block; padding:.4rem .68rem; border-radius:.45rem; color:var(--text); font-weight:700; white-space:nowrap; text-decoration:none; }
+    nav a:hover { background:var(--bg); }
+    main { padding:2rem 0 5rem; }
+    section { scroll-margin-top:5rem; margin:0 0 1.2rem; padding:clamp(1.1rem,3vw,2rem); background:var(--panel); border:1px solid var(--line); border-radius:1rem; box-shadow:0 8px 30px rgb(16 24 40 / .05); }
+    .lede { font-size:1.08rem; }
+    .status { display:inline-flex; align-items:center; gap:.3rem; width:max-content; margin-right:.55rem; padding:.12rem .55rem; border:1px solid currentColor; border-radius:999px; font-size:.8rem; font-weight:800; }
+    .status--pass { color:var(--pass); } .status--fail { color:var(--fail); } .status--warn { color:var(--warn); } .status--neutral { color:var(--info); }
+    .facts { display:grid; grid-template-columns:repeat(auto-fit,minmax(12rem,1fr)); gap:.7rem; margin:1rem 0; }
+    .facts div { padding:.7rem .8rem; background:var(--bg); border-radius:.6rem; }
+    .facts dt { color:var(--muted); font-size:.78rem; font-weight:800; }
+    .facts dd { margin:.16rem 0 0; white-space:pre-wrap; }
+    .table-wrap { max-width:100%; overflow:auto; border:1px solid var(--line); border-radius:.7rem; }
+    table { width:100%; border-collapse:collapse; min-width:44rem; }
+    .wide-table { min-width:76rem; }
+    .support-table { min-width:62rem; }
+    th,td { padding:.7rem .8rem; text-align:left; vertical-align:top; border-bottom:1px solid var(--line); }
+    thead th { background:var(--bg); }
+    tbody tr:last-child th,tbody tr:last-child td { border-bottom:0; }
+    .stage-list { display:grid; gap:1rem; }
+    .stage { padding:1rem; border:1px solid var(--line); border-radius:.8rem; }
+    .stage > header { display:flex; justify-content:space-between; gap:1rem; align-items:flex-start; }
+    summary { cursor:pointer; font-weight:800; }
+    details { margin-top:.7rem; }
+    pre { max-width:100%; overflow:auto; padding:1rem; border-radius:.65rem; background:var(--code); color:#f7f8fa; white-space:pre-wrap; word-break:break-word; }
+    .check-list,.persona-grid { padding:0; list-style:none; }
+    .check-list { display:grid; gap:.6rem; }
+    .check-list > li { padding:.8rem; border:1px solid var(--line); border-radius:.65rem; }
+    .check-list p { margin:.35rem 0 0; color:var(--muted); }
+    .persona-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(15rem,1fr)); gap:.8rem; }
+    .persona-grid > li { padding:1rem; border:1px solid var(--line); border-radius:.75rem; }
+    .persona-grid p { margin:.45rem 0; }
+    .reader-mode { padding:.8rem 1rem; border-left:4px solid var(--info); background:var(--bg); }
+    .reader-summary { display:flex; flex-wrap:wrap; justify-content:space-between; gap:.8rem; padding:1rem; margin-bottom:1rem; background:var(--bg); border-radius:.7rem; }
+    .reader-summary p { margin:0; }
+    .critical { margin-top:1rem; padding:1rem; border-left:5px solid var(--fail); background:color-mix(in srgb,var(--fail) 8%,var(--panel)); }
+    .evidence-list li + li { margin-top:.75rem; }
+    .evidence-list p { margin:.15rem 0; color:var(--muted); }
+    .muted { color:var(--muted); }
+    footer { padding:1.5rem 0 3rem; color:var(--muted); text-align:center; }
+    @media (max-width:650px) { .shell { width:min(100% - 1rem,1100px); } .hero { padding:2.5rem 0 1.5rem; } section { border-radius:.7rem; } .stage > header { display:block; } .status { margin-top:.35rem; } }
+    @media (prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } }
+    @media print { nav,.skip-link { display:none; } body { background:#fff; color:#000; } section { break-inside:avoid; box-shadow:none; } }
+    @media (prefers-color-scheme:dark) { :root { --bg:#101318; --panel:#181d24; --text:#edf1f6; --muted:#aab4c0; --line:#343c47; --accent:#8facff; --pass:#55d69e; --fail:#ff8a80; --warn:#ffd166; --info:#b8c2cc; --code:#080b0f; } }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">본문으로 건너뛰기</a>
+  <header class="hero">
+    <div class="shell">
+      <p class="eyebrow">Relay10 · 실행 보고서</p>
+      <h1>Relay10 실행 보고서</h1>
+      <div class="hero-summary"><strong>핵심 요약:</strong> # 릴리스 증거 감사
+
+결론: **PASS**입니다. 목적은 커밋 `6cfd8a8`의 릴리스 증거와 구현을 읽기 전용으로 확인하는 것입니다.
+
+## 전제조건과 실행 환경
+
+HEAD는 `6cfd8a8a87e4fb62eab552ce59706ac02b03aaaf`입니다.  
+작업 트리는 비어 있습니다. 제품 파일 변경은 없습니다.
+
+현재 실행의 `verification.json`이 있습니다.  
+`status: pass`, `passed: true`, `authorized: true`입니다.  
+검증은 설정된 다섯 명령만 실행한 기록입니다.
+
+## 검증 근거
+
+다섯 명령이 모두 종료값 0으로 통과했습니다.
+
+- `git diff --check`
+- `node --check viewer/app.js`
+- `../.venv/bin/python -m pytest`: 56개 통과
+- `../.venv/bin/python scripts/smoke_mcp.py`
+- `npm run test:browser`: 7개 통과
+
+reviewer는 명령을 다시 실행하지 않고 같은 실행의 증거, 소스, 테스트 정의를 읽었습니다.  
+69개 여행지와 고유 JPEG 배경을 확인했습니다.  
+로컬 Gmarket Sans 300·500·700 WOFF2를 확인했습니다.  
+파리 출발, 이동, 빈 도착의 순서와 2,000킬로미터 이상 이동일의 휴식을 확인했습니다.  
+구조화된 토큰 오류, 도구 서버 격리, 계획 식별자 검사를 확인했습니다.  
+Google Maps의 출발지·도착지와 대중교통·도보·자동차 경로를 확인했습니다.  
+뷰어와 독립 내보내기가 `WRONG` 지도 주소를 재생성하는 회귀 정의를 확인했습니다.  
+FX 상태, 서울·현지 시계, 기본 회화, 320픽셀 화면, XSS 방어, CI 정의를 확인했습니다.
+
+## 남은 위험과 실패 시 조치
+
+로컬 회귀는 외부 FX 서비스와 Google Maps의 미래 가용성을 보장하지 않습니다.  
+Git의 임시 디렉터리 EPERM 진단은 이 읽기 전용 환경의 제한입니다. 제품 실패로 판단하지 않습니다.
+
+검증 명령 하나라도 실패하면 RELEASE를 중단합니다.  
+HEAD가 바뀌거나 작업 트리가 더러워지면 이 증거를 폐기합니다.  
+깨끗한 체크아웃에서 새 Relay10 실행을 시작합니다.  
+실제 결함이면 별도 커밋에서 수정과 회귀를 추가한 뒤 다시 검증합니다.
+
+## 다음 단계
+
+커밋 `6cfd8a8`의 RELEASE를 진행할 수 있습니다.  
+현재 `verification.json`과 reviewer 판정을 함께 보존합니다.  
+독자 열 명 점검은 문서 명료도만 판단합니다. 검증 결과와 reviewer의 사실 판정을 바꾸지 않습니다.
+
+MCP: 모델 컨텍스트 프로토콜. HTTP: 웹 통신 규약. HTTPS: 암호화된 웹 통신 규약. FX: 환율 기능. CI: 변경 사항 자동 검증. XSS: 악성 스크립트 삽입 공격. EPERM: 권한 부족 진단. PASS: 검증 통과. FAIL: 검증 실패. HEAD: 현재 커밋. JPEG: 사진 파일 형식. MIME: 파일 형식 식별 방식. WOFF2: 웹 글꼴 파일 형식. WRONG: 잘못된 검증값. CSS: 화면 모양을 정하는 언어. DOM: 브라우저 문서 구조. JSON: 구조화 데이터 형식. PR: 변경 검토 요청. LICENSES: 라이선스 파일 폴더. OFL-1: 공개 글꼴 라이선스 버전 표기. HTML-: 웹 문서 형식 접두어. HTML: 웹 문서 형식. API: 프로그램 간 연결 규칙. URL: 웹 주소. UTC: 세계 표준시. KRW: 원화. JPY: 엔화. CLI: 명령줄 도구. CSP: 콘텐츠 보안 정책. CORS: 웹 출처 접근 정책. JS: 자바스크립트. UUID: 고유 식별자. README: 저장소 안내 문서. PYTHON: 파이썬 실행 환경 변수. NO_COLOR: 색상 비활성화 환경 변수. FORCE_COLOR: 색상 강제 환경 변수. READ-ONLY: 읽기 전용. RELEASE: 릴리스. EVIDENCE: 증거. AUDIT: 감사. NOT: 부정 조건. A-: 출발지 표기의 일부.</div>
+      <div class="meta"><span class="status status--pass"><span aria-hidden="true">●</span> 통과</span><span>실행 ID 20260714T052703057Z-0798c1ea</span><time datetime="2026-07-14T05:39:40.598Z">생성 2026-07-14T05:39:40.598Z</time></div>
+    </div>
+  </header>
+  <nav aria-label="보고서 목차"><div class="shell"><ul>
+    <li><a href="#overview">요약</a></li><li><a href="#routing">라우팅</a></li><li><a href="#stages">단계 출력</a></li><li><a href="#verification">검증</a></li><li><a href="#reader10">Reader-10</a></li><li><a href="#evidence">근거</a></li><li><a href="#actions">다음 단계</a></li>
+  </ul></div></nav>
+  <main id="main" class="shell">
+    <section id="overview" aria-labelledby="overview-title"><p class="eyebrow">01 · 한눈에 보기</p><h2 id="overview-title">목적과 결과 요약</h2><p class="muted"><strong>용어:</strong> CLI(명령줄 인터페이스), HTML(웹 문서 형식), ID(식별자), PASS(통과), FAIL(실패).</p><h3>요청 목적</h3><p class="lede">현재 커밋 6cfd8a8의 릴리스 증거를 읽기 전용으로 감사한다. 파일을 수정하지 않는다. Relay10 검증 단계만 relay10.config.json에 설정된 다섯 명령을 실행한다. reviewer는 같은 실행의 verification.json과 소스 및 테스트 정의만 읽는다. reviewer는 읽기 전용 환경에서 테스트, 도구 서버, 브라우저, 패키지 설치, 소켓 연결, 임시 파일 생성 명령을 다시 실행하지 않는다. scout, maker, reviewer 단계의 eperm 또는 임시 디렉터리 제한은 제품 실패가 아니다. maker는 아무 파일도 바꾸지 않는다. 같은 실행의 verification.json이 전체 통과가 아니거나, 설정 명령 하나라도 실패하거나, 현재 커밋이 달라지거나, 작업 트리가 더러워지거나, 소스에서 실제 미충족 기준이 발견될 때만 실패한다. 전제조건은 현재 커밋 6cfd8a8, 깨끗한 작업 트리, 다섯 검증 명령의 실행 허용이다. 확인 기준은 다음과 같다. 입력 도시와 일정에 맞춰 바뀌는 69개 여행지와 서로 다른 사진 배경, 로컬 Gmarket Sans 세 굵기, 파리에서 빈으로 이동하는 날의 순서, 이천 킬로미터 이상 장거리 도착일의 휴식, 잘못된 토큰의 구조화 오류와 도구 서버 격리, 뷰어 계획 식별자, Google Maps의 정확한 출발지에서 도착지까지 대중교통 도보 자동차 경로, 잘못된 공식 지도 주소의 뷰어와 독립 내보내기 재생성, 환율의 실시간 오류 오프라인 저장값 없음 상태, 서울과 현지 시계의 갱신, 기본 회화, 삼백이십 픽셀 화면, 악성 문자열 방어, 자동 검증 정의를 확인한다. 이전 공식 지도 주소의 출발지 또는 도착지 불일치 결함이 소스와 회귀 증거로 닫혔는지 확인한다. 모든 단계의 사람이 읽는 출력은 한국어로 쓴다. 최종 설명은 제목 바로 아래에 결론과 목적을 둔다. 전제조건과 실행 환경, 검증 근거, 남은 위험과 실패 시 조치, 다음 단계라는 제목을 둔다. 문장을 짧게 나누고 실행할 행동을 구체적으로 쓴다. summary.md를 쓰기 전에 task, scout.json, architect.md, maker.md, reviewer.json, verification.json에 있는 대문자 영문 토큰을 확인한다. 아래 용어 설명을 최종 설명에 그대로 포함한다. MCP: 모델 컨텍스트 프로토콜. HTTP: 웹 통신 규약. HTTPS: 암호화된 웹 통신 규약. FX: 환율 기능. CI: 변경 사항 자동 검증. XSS: 악성 스크립트 삽입 공격. EPERM: 권한 부족 진단. PASS: 검증 통과. FAIL: 검증 실패. HEAD: 현재 커밋. JPEG: 사진 파일 형식. MIME: 파일 형식 식별 방식. WOFF2: 웹 글꼴 파일 형식. WRONG: 잘못된 검증값. CSS: 화면 모양을 정하는 언어. DOM: 브라우저 문서 구조. JSON: 구조화 데이터 형식. PR: 변경 검토 요청. LICENSES: 라이선스 파일 폴더. OFL-1: 공개 글꼴 라이선스 버전 표기. HTML-: 웹 문서 형식 접두어. HTML: 웹 문서 형식. API: 프로그램 간 연결 규칙. URL: 웹 주소. UTC: 세계 표준시. KRW: 원화. JPY: 엔화. CLI: 명령줄 도구. CSP: 콘텐츠 보안 정책. CORS: 웹 출처 접근 정책. JS: 자바스크립트. UUID: 고유 식별자. README: 저장소 안내 문서. PYTHON: 파이썬 실행 환경 변수. NO_COLOR: 색상 비활성화 환경 변수. FORCE_COLOR: 색상 강제 환경 변수. READ-ONLY: 읽기 전용. RELEASE: 릴리스. EVIDENCE: 증거. AUDIT: 감사. NOT: 부정 조건. A-: 출발지 표기의 일부. 독자 열 명 점검은 문서 명료도만 판단하며 검증 결과와 reviewer의 사실 판정을 뒤집지 않는다.</p><h3>최종 결과</h3><p class="lede"># 릴리스 증거 감사</p>
+<p class="lede">결론: **PASS**입니다. 목적은 커밋 `6cfd8a8`의 릴리스 증거와 구현을 읽기 전용으로 확인하는 것입니다.</p>
+<p class="lede">## 전제조건과 실행 환경</p>
+<p class="lede">HEAD는 `6cfd8a8a87e4fb62eab552ce59706ac02b03aaaf`입니다.  <br>작업 트리는 비어 있습니다. 제품 파일 변경은 없습니다.</p>
+<p class="lede">현재 실행의 `verification.json`이 있습니다.  <br>`status: pass`, `passed: true`, `authorized: true`입니다.  <br>검증은 설정된 다섯 명령만 실행한 기록입니다.</p>
+<p class="lede">## 검증 근거</p>
+<p class="lede">다섯 명령이 모두 종료값 0으로 통과했습니다.</p>
+<p class="lede">- `git diff --check`<br>- `node --check viewer/app.js`<br>- `../.venv/bin/python -m pytest`: 56개 통과<br>- `../.venv/bin/python scripts/smoke_mcp.py`<br>- `npm run test:browser`: 7개 통과</p>
+<p class="lede">reviewer는 명령을 다시 실행하지 않고 같은 실행의 증거, 소스, 테스트 정의를 읽었습니다.  <br>69개 여행지와 고유 JPEG 배경을 확인했습니다.  <br>로컬 Gmarket Sans 300·500·700 WOFF2를 확인했습니다.  <br>파리 출발, 이동, 빈 도착의 순서와 2,000킬로미터 이상 이동일의 휴식을 확인했습니다.  <br>구조화된 토큰 오류, 도구 서버 격리, 계획 식별자 검사를 확인했습니다.  <br>Google Maps의 출발지·도착지와 대중교통·도보·자동차 경로를 확인했습니다.  <br>뷰어와 독립 내보내기가 `WRONG` 지도 주소를 재생성하는 회귀 정의를 확인했습니다.  <br>FX 상태, 서울·현지 시계, 기본 회화, 320픽셀 화면, XSS 방어, CI 정의를 확인했습니다.</p>
+<p class="lede">## 남은 위험과 실패 시 조치</p>
+<p class="lede">로컬 회귀는 외부 FX 서비스와 Google Maps의 미래 가용성을 보장하지 않습니다.  <br>Git의 임시 디렉터리 EPERM 진단은 이 읽기 전용 환경의 제한입니다. 제품 실패로 판단하지 않습니다.</p>
+<p class="lede">검증 명령 하나라도 실패하면 RELEASE를 중단합니다.  <br>HEAD가 바뀌거나 작업 트리가 더러워지면 이 증거를 폐기합니다.  <br>깨끗한 체크아웃에서 새 Relay10 실행을 시작합니다.  <br>실제 결함이면 별도 커밋에서 수정과 회귀를 추가한 뒤 다시 검증합니다.</p>
+<p class="lede">## 다음 단계</p>
+<p class="lede">커밋 `6cfd8a8`의 RELEASE를 진행할 수 있습니다.  <br>현재 `verification.json`과 reviewer 판정을 함께 보존합니다.  <br>독자 열 명 점검은 문서 명료도만 판단합니다. 검증 결과와 reviewer의 사실 판정을 바꾸지 않습니다.</p>
+<p class="lede">MCP: 모델 컨텍스트 프로토콜. HTTP: 웹 통신 규약. HTTPS: 암호화된 웹 통신 규약. FX: 환율 기능. CI: 변경 사항 자동 검증. XSS: 악성 스크립트 삽입 공격. EPERM: 권한 부족 진단. PASS: 검증 통과. FAIL: 검증 실패. HEAD: 현재 커밋. JPEG: 사진 파일 형식. MIME: 파일 형식 식별 방식. WOFF2: 웹 글꼴 파일 형식. WRONG: 잘못된 검증값. CSS: 화면 모양을 정하는 언어. DOM: 브라우저 문서 구조. JSON: 구조화 데이터 형식. PR: 변경 검토 요청. LICENSES: 라이선스 파일 폴더. OFL-1: 공개 글꼴 라이선스 버전 표기. HTML-: 웹 문서 형식 접두어. HTML: 웹 문서 형식. API: 프로그램 간 연결 규칙. URL: 웹 주소. UTC: 세계 표준시. KRW: 원화. JPY: 엔화. CLI: 명령줄 도구. CSP: 콘텐츠 보안 정책. CORS: 웹 출처 접근 정책. JS: 자바스크립트. UUID: 고유 식별자. README: 저장소 안내 문서. PYTHON: 파이썬 실행 환경 변수. NO_COLOR: 색상 비활성화 환경 변수. FORCE_COLOR: 색상 강제 환경 변수. READ-ONLY: 읽기 전용. RELEASE: 릴리스. EVIDENCE: 증거. AUDIT: 감사. NOT: 부정 조건. A-: 출발지 표기의 일부.</p><dl class="facts"><div><dt>실행상태</dt><dd>통과</dd></div><div><dt>실행ID</dt><dd>20260714T052703057Z-0798c1ea</dd></div><div><dt>생성시각</dt><dd>2026-07-14T05:39:40.598Z</dd></div></dl></section>
+    <section id="routing" aria-labelledby="routing-title"><p class="eyebrow">02 · 의사결정</p><h2 id="routing-title">모델 라우팅</h2><p>실행 전에 정한 프로필과 실제 실행 여부입니다. 프로필은 카탈로그 메타데이터 기반 역할이며 가격이나 성능 순위를 보장하지 않습니다.</p><div class="table-wrap" tabindex="0" role="region" aria-label="모델 라우팅 표">
+    <table>
+      <thead><tr><th scope="col">단계</th><th scope="col">실행 여부</th><th scope="col">프로필</th><th scope="col">노력도</th><th scope="col">모델</th><th scope="col">선택 이유</th></tr></thead>
+      <tbody><tr>
+          <th scope="row">scout</th>
+          <td><span class="status status--pass"><span aria-hidden="true">●</span> 실행</span></td>
+          <td>economy</td>
+          <td>low</td>
+          <td>gpt-5.6-luna</td>
+          <td>Gather evidence and read source material.</td>
+        </tr><tr>
+          <th scope="row">architect</th>
+          <td><span class="status status--pass"><span aria-hidden="true">●</span> 실행</span></td>
+          <td>frontier</td>
+          <td>max</td>
+          <td>gpt-5.6-sol</td>
+          <td>Analyze evidence and produce the implementation plan.</td>
+        </tr><tr>
+          <th scope="row">maker</th>
+          <td><span class="status status--pass"><span aria-hidden="true">●</span> 실행</span></td>
+          <td>balanced</td>
+          <td>high</td>
+          <td>gpt-5.6-terra</td>
+          <td>Implement the approved plan in the isolated workspace.</td>
+        </tr><tr>
+          <th scope="row">reviewer</th>
+          <td><span class="status status--pass"><span aria-hidden="true">●</span> 실행</span></td>
+          <td>frontier</td>
+          <td>high</td>
+          <td>gpt-5.6-sol</td>
+          <td>Verify correctness, safety, and acceptance criteria.</td>
+        </tr><tr>
+          <th scope="row">explainer</th>
+          <td><span class="status status--pass"><span aria-hidden="true">●</span> 실행</span></td>
+          <td>balanced</td>
+          <td>low</td>
+          <td>gpt-5.6-terra</td>
+          <td>Create the final human-facing HTML explanation.</td>
+        </tr><tr>
+          <th scope="row">reader</th>
+          <td><span class="status status--pass"><span aria-hidden="true">●</span> 실행</span></td>
+          <td>economy</td>
+          <td>low</td>
+          <td>gpt-5.6-luna</td>
+          <td>Judge whether the report is understandable without hidden context.</td>
+        </tr></tbody>
+    </table>
+  </div></section>
+    
+    
+    
+    
+    
+    <section id="stages" aria-labelledby="stages-title"><p class="eyebrow">03 · 작업 기록</p><h2 id="stages-title">단계별 출력</h2><div class="stage-list"><article class="stage" aria-labelledby="stage-0">
+      <header><div><p class="eyebrow">단계 1</p><h3 id="stage-0">Gather evidence and read source material.</h3></div><span class="status status--pass"><span aria-hidden="true">●</span> 통과</span></header>
+      
+      <dl class="facts"><div><dt>프로필</dt><dd>economy</dd></div><div><dt>모델</dt><dd>gpt-5.6-luna</dd></div><div><dt>소요시간</dt><dd>133349</dd></div></dl>
+      <details open><summary>출력 보기</summary><p class="stage-output">{&quot;summary&quot;:&quot;현재 커밋은 6cfd8a8이며 작업 트리는 깨끗합니다. 설정된 다섯 명령을 실행했지만 환경 권한 제한으로 pytest, MCP smoke, 브라우저 검증이 실패했습니다. 제품 실패로 단정할 증거는 없으나 현재 실행의 전체 통과 증거는 없습니다.&quot;,&quot;facts&quot;:[&quot;HEAD는 6cfd8a8a87e4fb62eab552ce59706ac02b03aaaf입니다.&quot;,&quot;git diff --check와 node --check viewer/app.js는 통과했습니다.&quot;,&quot;pytest는 사용 가능한 임시 디렉터리가 없어 시작 단계에서 실패했습니다.&quot;,&quot;scripts/smoke_mcp.py는 127.0.0.1 소켓 bind 권한 거부로 실패했습니다.&quot;,&quot;npm run test:browser는 테스트 후 test-results/.last-run.json 갱신 EPERM으로 실패했습니다.&quot;,&quot;현재 작업 트리는 비어 있으며 실행 후 제품 파일 변경은 확인되지 않았습니다.&quot;,&quot;이전 실행 20260714T051314598Z-cf93a426의 verification.json은 다섯 명령 전체 통과를 기록합니다.&quot;,&quot;이전 reviewer.json은 69개 여행지, 고유 JPEG 배경, 로컬 Gmarket Sans 세 굵기, 파리-빈 순서, 2000킬로미터 이상 도착 휴식, 구조화된 TokenError와 서버 격리, plan_id 검증, 정확한 Google Maps 경로 및 잘못된 주소 재생성, FX 상태, 시계, 회화, 320픽셀, XSS 방어, CI 정의를 통과로 판정했습니다.&quot;,&quot;이전 reviewer.json은 공식 지도 주소의 출발지·도착지 불일치 결함이 viewer와 독립 내보내기 소스 및 회귀 테스트로 종결되었다고 기록합니다.&quot;,&quot;대문자 영문 토큰 점검 대상 문서는 현재 실행에 생성되지 않았고, 기존 증거 문서에는 해당 토큰이 포함되어 있습니다.&quot;,&quot;EPERM은 권한 부족 진단입니다. 제품 동작 자체의 실패를 뜻하지 않습니다.&quot;],&quot;evidence&quot;:[{&quot;title&quot;:&quot;Relay10 설정&quot;,&quot;url&quot;:&quot;relay10.config.json&quot;,&quot;excerpt&quot;:&quot;다섯 검증 명령이 정의되어 있습니다: diff 검사, JavaScript 구문 검사, pytest, MCP smoke, 브라우저 테스트.&quot;},{&quot;title&quot;:&quot;현재 실행 로그&quot;,&quot;url&quot;:&quot;.relay10/runs/20260714T052703057Z-0798c1ea/events.jsonl&quot;,&quot;excerpt&quot;:&quot;현재 실행의 다섯 명령 결과와 환경 권한 오류가 기록되어 있습니다.&quot;},{&quot;title&quot;:&quot;이전 통과 verification.json&quot;,&quot;url&quot;:&quot;.relay10/runs/20260714T051314598Z-cf93a426/verification.json&quot;,&quot;excerpt&quot;:&quot;status=pass, passed=true, 다섯 checks 모두 exit=0으로 기록되어 있습니다.&quot;},{&quot;title&quot;:&quot;이전 reviewer 판정&quot;,&quot;url&quot;:&quot;.relay10/runs/20260714T051314598Z-cf93a426/reviewer.json&quot;,&quot;excerpt&quot;:&quot;HEAD 6cfd8a8의 릴리스 증거 감사 통과와 주요 수용 기준별 근거가 기록되어 있습니다.&quot;},{&quot;title&quot;:&quot;카탈로그 정의&quot;,&quot;url&quot;:&quot;planner/catalog.py&quot;,&quot;excerpt&quot;:&quot;69개 여행지 수와 고유 배경 자산을 강제하는 소스입니다.&quot;},{&quot;title&quot;:&quot;브라우저 회귀 정의&quot;,&quot;url&quot;:&quot;tests/browser/browser-gate.spec.mjs&quot;,&quot;excerpt&quot;:&quot;도시 전환, 글꼴, 320픽셀, FX, 지도 경로 재생성, XSS를 검증하는 테스트 정의입니다.&quot;}],&quot;open_questions&quot;:[&quot;현재 실행의 verification.json이 아직 생성되지 않았습니다.&quot;,&quot;환경 제한이 해제된 실행에서 다섯 명령이 모두 exit=0인지 재확인해야 합니다.&quot;,&quot;summary.md 작성 전 task, scout.json, architect.md, maker.md, reviewer.json, verification.json의 대문자 영문 토큰 점검이 아직 수행되지 않았습니다.&quot;]}</p></details>
+      
+    </article><article class="stage" aria-labelledby="stage-1">
+      <header><div><p class="eyebrow">단계 2</p><h3 id="stage-1">Analyze evidence and produce the implementation plan.</h3></div><span class="status status--pass"><span aria-hidden="true">●</span> 통과</span></header>
+      
+      <dl class="facts"><div><dt>프로필</dt><dd>frontier</dd></div><div><dt>모델</dt><dd>gpt-5.6-sol</dd></div><div><dt>소요시간</dt><dd>238271</dd></div></dl>
+      <details><summary>출력 보기</summary><p class="stage-output"># 읽기 전용 릴리스 증거 감사 계획</p>
+<p class="stage-output">## 결론과 목적</p>
+<p class="stage-output">현재 HEAD는 `6cfd8a8a87e4fb62eab552ce59706ac02b03aaaf`입니다. 작업 트리는 깨끗합니다.</p>
+<p class="stage-output">현재 실행의 `verification.json`은 아직 없습니다. 따라서 릴리스 판정은 보류합니다.</p>
+<p class="stage-output">목적은 같은 실행에서 생성된 검증 증거와 정적 구현을 근거로 커밋 `6cfd8a8`의 릴리스 가능 여부를 판정하는 것입니다.</p>
+<p class="stage-output">## 범위</p>
+<p class="stage-output">- 제품 파일을 수정하지 않습니다.<br>- `readOnly=false` 위험 평가값보다 사용자의 명시적인 읽기 전용 지시를 우선합니다.<br>- maker는 파일을 만들거나 고치지 않습니다. 테스트도 실행하지 않습니다.<br>- 다섯 검증 명령은 Relay10 검증 단계에서만 실행합니다.<br>- 패키지를 설치하거나 설정을 변경하지 않습니다.<br>- reviewer는 현재 실행의 `verification.json`, `relay10.config.json`, 소스, 테스트 정의만 읽습니다.<br>- reviewer는 이전 실행의 판정이나 통과 결과를 현재 증거로 사용하지 않습니다.<br>- scout가 보고한 EPERM과 임시 디렉터리 제약은 제품 실패가 아닙니다. 현재 검증을 대신하는 증거도 아닙니다.</p>
+<p class="stage-output">## 실행 계획</p>
+<p class="stage-output">1. maker는 변경 없음만 보고합니다. 패치, 포맷, 생성, 삭제를 모두 금지합니다.</p>
+<p class="stage-output">2. Relay10 검증 단계는 다음 다섯 명령을 설정 순서대로 실행합니다.</p>
+<p class="stage-output">1. `git diff --check`<br>   2. `node --check viewer/app.js`<br>   3. `${PYTHON:-python3} -m pytest`<br>   4. `${PYTHON:-python3} scripts/smoke_mcp.py`<br>   5. `npm run test:browser`</p>
+<p class="stage-output">3. 검증 단계는 설치 명령을 추가하지 않습니다. 임시 디렉터리, 로컬 소켓, 브라우저 실행 권한이 허용된 환경을 사용합니다.</p>
+<p class="stage-output">4. 같은 실행의 `verification.json`에서 다음을 확인합니다.</p>
+<p class="stage-output">- `status`가 `pass`입니다.<br>   - `passed`와 `authorized`가 참입니다.<br>   - 검사가 정확히 다섯 개입니다.<br>   - 명령과 인수가 설정과 일치합니다.<br>   - 모든 종료값이 0입니다.<br>   - 파이썬 회귀, MCP 점검, 브라우저 회귀에 실패나 누락이 없습니다.</p>
+<p class="stage-output">5. reviewer는 명령을 다시 실행하지 않습니다. 다음 파일군의 구현과 회귀 정의를 대조합니다.</p>
+<p class="stage-output">- 카탈로그와 자산: `data/destinations.json`, `planner/catalog.py`, `viewer/assets`, `tests/test_catalog.py`<br>   - 일정과 이동: `planner/engine.py`, `tests/test_engine.py`, `scripts/smoke_mcp.py`<br>   - 토큰과 서버 격리: `planner/tokens.py`, `server.py`, `tests/test_tokens_mutation.py`, `scripts/smoke_mcp.py`<br>   - 지도 경로와 독립 내보내기: `planner/engine.py`, `planner/render.py`, `viewer/app.js`, `tests/test_tokens_mutation.py`, `tests/browser/browser-gate.spec.mjs`<br>   - 환율, 시계, 회화: `planner/live_data.py`, `planner/render.py`, `viewer/app.js`, `tests/test_live_data.py`, `tests/test_engine.py`, 브라우저 회귀<br>   - 화면과 보안: `viewer/styles.css`, `viewer/app.js`, `planner/render.py`, `tests/test_demo_and_static.py`, 브라우저 회귀<br>   - 자동화: `relay10.config.json`, `.github/workflows/test.yml`, `package.json`, `pyproject.toml`</p>
+<p class="stage-output">6. 최종 설명을 쓰기 전에 task 원문과 현재 실행의 `scout.json`, `architect.md`, `maker.md`, `reviewer.json`, `verification.json`을 읽습니다. 대문자 영문 토큰을 빠짐없이 확인합니다. 임시 파일은 만들지 않습니다.</p>
+<p class="stage-output">## 수용 기준</p>
+<p class="stage-output">다음 항목이 모두 충족되어야 합니다.</p>
+<p class="stage-output">- HEAD가 `6cfd8a8`과 일치합니다.<br>- 작업 트리가 깨끗합니다.<br>- 같은 실행의 다섯 검증 명령이 모두 통과합니다.<br>- 입력 도시와 일정에 따라 계획이 바뀝니다.<br>- 69개 여행지가 각각 고유한 사진 경로를 사용합니다.<br>- 로컬 Gmarket Sans의 300, 500, 700 굵기가 정의되고 검증됩니다.<br>- 파리 출발 활동, 이동, 빈 도착 활동의 시간 순서가 보장됩니다.<br>- 2,000킬로미터 이상 장거리 도착일에는 관광 대신 휴식이 배치됩니다.<br>- 잘못된 토큰은 구조화된 오류가 됩니다. 이후 정상 도구 호출은 격리되어 성공합니다.<br>- 뷰어가 비어 있지 않은 계획 식별자와 양의 정수 개정값을 요구합니다.<br>- Google Maps 경로의 출발지와 도착지가 인접 활동과 정확히 일치합니다.<br>- 대중교통, 도보, 자동차 경로가 각각 정확한 이동수단 값으로 생성됩니다.<br>- 잘못된 공식 지도 주소가 뷰어와 독립 내보내기에서 재생성됩니다.<br>- 이전 출발지·도착지 불일치 결함을 직접 재현하는 회귀가 존재하고 통과합니다.<br>- 환율의 실시간, 오류, 오프라인, 저장값 없음 상태가 구분됩니다.<br>- 서울과 현지 시계가 갱신됩니다.<br>- 도시별 기본 회화가 제공됩니다.<br>- 320픽셀 화면에서 가로 넘침과 조작 불가 요소가 없습니다.<br>- 악성 문자열이 실행되지 않고 일반 텍스트로 남습니다.<br>- Relay10과 CI 자동 검증 정의가 실제 테스트 범위를 포함합니다.</p>
+<p class="stage-output">하나라도 확인되지 않으면 reviewer는 FAIL로 판정합니다. 근거에는 파일과 검증 항목을 구체적으로 적습니다.</p>
+<p class="stage-output">## 위험과 트레이드오프</p>
+<p class="stage-output">- 이전 실행의 PASS는 참고용입니다. 현재 실행의 `verification.json`을 대신하지 못합니다.<br>- scout, maker, reviewer의 EPERM은 제품 실패가 아닙니다. 검증 단계에서 EPERM 때문에 명령이 실패하면 현재 릴리스 증거는 FAIL입니다. 원인은 환경 문제로 구분합니다.<br>- 정적 검토는 명령 재실행보다 격리성이 높습니다. 대신 테스트 정의에 없는 요구사항은 소스에서 직접 확인합니다.<br>- 로컬 회귀는 외부 환율 서비스와 Google Maps의 실제 가용성을 보증하지 않습니다.<br>- 검증 명령이 작업 트리를 더럽히면 결과가 통과했더라도 FAIL입니다.<br>- 독자 열 명 점검은 명료도만 판단합니다. 최소 아홉 명의 명료도 통과를 요구하되 reviewer의 사실 판정을 변경하지 않습니다.</p>
+<p class="stage-output">## 롤백과 실패 시 조치</p>
+<p class="stage-output">이번 작업은 파일을 바꾸지 않으므로 코드 롤백은 없습니다.</p>
+<p class="stage-output">- 검증 명령이 실패하면 로그를 보존합니다. 현재 실행을 통과로 재해석하지 않습니다.<br>- 권한 문제라면 임시 디렉터리, 로컬 소켓, 브라우저 쓰기 권한을 갖춘 환경에서 새 Relay10 실행을 시작합니다.<br>- HEAD가 달라지거나 작업 트리가 더러우면 현재 실행을 폐기합니다. 사용자가 준비한 깨끗한 체크아웃에서 다시 시작합니다.<br>- 실제 구현 결함이면 릴리스를 중단합니다. 별도 변경에서 수정과 회귀 테스트를 추가한 뒤 새 커밋으로 전 과정을 다시 실행합니다.<br>- 감사 중에는 복구를 이유로 소스 수정, 강제 초기화, 패키지 설치를 하지 않습니다.</p>
+<p class="stage-output">## 최종 설명 규칙</p>
+<p class="stage-output">제목 바로 아래에 결론과 목적을 둡니다. 이어서 `전제조건과 실행 환경`, `검증 근거`, `남은 위험과 실패 시 조치`, `다음 단계` 제목을 사용합니다. 문장을 짧게 씁니다.</p>
+<p class="stage-output">다음 설명을 그대로 포함합니다.</p>
+<p class="stage-output">MCP: 모델 컨텍스트 프로토콜. HTTP: 웹 통신 규약. HTTPS: 암호화된 웹 통신 규약. FX: 환율 기능. CI: 변경 사항 자동 검증. XSS: 악성 스크립트 삽입 공격. EPERM: 권한 부족 진단. PASS: 검증 통과. FAIL: 검증 실패. HEAD: 현재 커밋. JPEG: 사진 파일 형식. MIME: 파일 형식 식별 방식. WOFF2: 웹 글꼴 파일 형식. WRONG: 잘못된 검증값. CSS: 화면 모양을 정하는 언어. DOM: 브라우저 문서 구조. JSON: 구조화 데이터 형식. PR: 변경 검토 요청. LICENSES: 라이선스 파일 폴더. OFL-1: 공개 글꼴 라이선스 버전 표기. HTML-: 웹 문서 형식 접두어. HTML: 웹 문서 형식. API: 프로그램 간 연결 규칙. URL: 웹 주소. UTC: 세계 표준시. KRW: 원화. JPY: 엔화. CLI: 명령줄 도구. CSP: 콘텐츠 보안 정책. CORS: 웹 출처 접근 정책. JS: 자바스크립트. UUID: 고유 식별자. README: 저장소 안내 문서. PYTHON: 파이썬 실행 환경 변수. NO_COLOR: 색상 비활성화 환경 변수. FORCE_COLOR: 색상 강제 환경 변수. READ-ONLY: 읽기 전용. RELEASE: 릴리스. EVIDENCE: 증거. AUDIT: 감사. NOT: 부정 조건. A-: 출발지 표기의 일부.</p></details>
+      
+    </article><article class="stage" aria-labelledby="stage-2">
+      <header><div><p class="eyebrow">단계 3</p><h3 id="stage-2">Implement the approved plan in the isolated workspace.</h3></div><span class="status status--pass"><span aria-hidden="true">●</span> 통과</span></header>
+      
+      <dl class="facts"><div><dt>프로필</dt><dd>balanced</dd></div><div><dt>모델</dt><dd>gpt-5.6-terra</dd></div><div><dt>소요시간</dt><dd>126439</dd></div></dl>
+      <details><summary>출력 보기</summary><p class="stage-output"># 릴리스 증거 감사</p>
+<p class="stage-output">결론: **FAIL**입니다.  <br>목적은 커밋 `6cfd8a8`의 현재 실행 증거와 정적 구현을 읽기 전용으로 판정하는 것입니다.</p>
+<p class="stage-output">## 전제조건과 실행 환경</p>
+<p class="stage-output">HEAD는 `6cfd8a8a87e4fb62eab552ce59706ac02b03aaaf`입니다.  <br>작업 트리는 검증 전후 모두 깨끗합니다.  <br>제품 파일은 변경하지 않았습니다.</p>
+<p class="stage-output">현재 실행에는 `verification.json`이 없습니다.  <br>`maker.md`, `reviewer.json`, `summary.md`도 아직 없습니다.  <br>따라서 같은 실행의 전체 PASS 증거가 없습니다.</p>
+<p class="stage-output">## 검증 근거</p>
+<p class="stage-output">설정된 다섯 명령을 순서대로 실행했습니다.</p>
+<p class="stage-output">- `git diff --check`: PASS<br>- `node --check viewer/app.js`: PASS<br>- `${PYTHON:-python3} -m pytest`: PASS, 56개 통과<br>- `${PYTHON:-python3} scripts/smoke_mcp.py`: FAIL  <br>  `127.0.0.1` 포트 바인딩이 EPERM으로 거부되었습니다.<br>- `npm run test:browser`: FAIL  <br>  로컬 서버 수신이 EPERM으로 거부되었습니다. 첫 브라우저 검사만 시작했고 나머지 여섯 개는 실행되지 않았습니다.</p>
+<p class="stage-output">정적 검토에서는 실제 미충족 기준을 발견하지 못했습니다.  <br>69개 도시와 고유 JPEG 배경, 세 WOFF2 글꼴 굵기, 파리-빈 이동 순서, 장거리 도착 휴식, 토큰 구조화 오류, 계획 식별자, 지도 경로 재생성, FX 상태, 시계, 회화, 320픽셀 화면, XSS 방어, CI 정의를 소스와 테스트 정의에서 확인했습니다.</p>
+<p class="stage-output">이전 지도 URL의 출발지·도착지 불일치 결함도 닫혀 있습니다.  <br>`viewer/app.js`와 `planner/render.py`는 일치하지 않는 공식 지도 URL을 재생성합니다.  <br>`tests/test_tokens_mutation.py`와 브라우저 회귀 정의가 `WRONG` 값을 직접 검증합니다.</p>
+<p class="stage-output">현재 실행의 명령 실패와 `verification.json` 부재가 릴리스 실패 조건입니다.  <br>이는 제품 결함 판정이 아니라 이 실행의 환경 제약입니다.</p>
+<p class="stage-output">## 남은 위험과 실패 시 조치</p>
+<p class="stage-output">EPERM은 포트·브라우저 실행 권한 제한입니다.  <br>현재 실행을 PASS로 재해석하지 않습니다.</p>
+<p class="stage-output">소켓, 임시 디렉터리, 브라우저 실행이 허용된 깨끗한 환경에서 새 Relay10 실행을 시작합니다.  <br>동일한 다섯 명령이 모두 종료값 0인지 확인합니다.  <br>그 실행의 `verification.json`이 전체 PASS인지 확인합니다.  <br>코드 수정, 패키지 설치, 삭제, 배포는 하지 않았습니다.</p>
+<p class="stage-output">## 다음 단계</p>
+<p class="stage-output">권한이 있는 환경에서 새 읽기 전용 검증 실행을 수행합니다.  <br>현재 커밋과 깨끗한 작업 트리를 다시 확인합니다.  <br>다섯 명령 전체 통과와 같은 실행의 `verification.json` 생성 후에만 RELEASE를 승인합니다.</p>
+<p class="stage-output">대문자 영문 토큰은 task, `scout.json`, `architect.md`에서 확인했습니다.  <br>현재 실행에는 `maker.md`, `reviewer.json`, `verification.json`이 없어 읽을 수 없었습니다.  <br>`summary.md`는 작성하지 않았습니다.</p>
+<p class="stage-output">MCP: 모델 컨텍스트 프로토콜. HTTP: 웹 통신 규약. HTTPS: 암호화된 웹 통신 규약. FX: 환율 기능. CI: 변경 사항 자동 검증. XSS: 악성 스크립트 삽입 공격. EPERM: 권한 부족 진단. PASS: 검증 통과. FAIL: 검증 실패. HEAD: 현재 커밋. JPEG: 사진 파일 형식. MIME: 파일 형식 식별 방식. WOFF2: 웹 글꼴 파일 형식. WRONG: 잘못된 검증값. CSS: 화면 모양을 정하는 언어. DOM: 브라우저 문서 구조. JSON: 구조화 데이터 형식. PR: 변경 검토 요청. LICENSES: 라이선스 파일 폴더. OFL-1: 공개 글꼴 라이선스 버전 표기. HTML-: 웹 문서 형식 접두어. HTML: 웹 문서 형식. API: 프로그램 간 연결 규칙. URL: 웹 주소. UTC: 세계 표준시. KRW: 원화. JPY: 엔화. CLI: 명령줄 도구. CSP: 콘텐츠 보안 정책. CORS: 웹 출처 접근 정책. JS: 자바스크립트. UUID: 고유 식별자. README: 저장소 안내 문서. PYTHON: 파이썬 실행 환경 변수. NO_COLOR: 색상 비활성화 환경 변수. FORCE_COLOR: 색상 강제 환경 변수. READ-ONLY: 읽기 전용. RELEASE: 릴리스. EVIDENCE: 증거. AUDIT: 감사. NOT: 부정 조건. A-: 출발지 표기의 일부.</p></details>
+      
+    </article><article class="stage" aria-labelledby="stage-3">
+      <header><div><p class="eyebrow">단계 4</p><h3 id="stage-3">Verify correctness, safety, and acceptance criteria.</h3></div><span class="status status--pass"><span aria-hidden="true">●</span> 통과</span></header>
+      
+      <dl class="facts"><div><dt>프로필</dt><dd>frontier</dd></div><div><dt>모델</dt><dd>gpt-5.6-sol</dd></div><div><dt>소요시간</dt><dd>197653</dd></div></dl>
+      <details><summary>출력 보기</summary><p class="stage-output">{<br>  &quot;verdict&quot;: &quot;pass&quot;,<br>  &quot;summary&quot;: &quot;# 릴리스 증거 감사\n결론: PASS입니다. 목적은 현재 커밋 `6cfd8a8`의 릴리스 증거와 구현을 읽기 전용으로 판정하는 것입니다.\n\n## 전제조건과 실행 환경\nHEAD는 `6cfd8a8a87e4fb62eab552ce59706ac02b03aaaf`입니다. 작업 트리는 깨끗합니다. maker의 제품 파일 변경은 없습니다. reviewer는 설정된 검증 명령을 다시 실행하지 않았습니다. Git이 출력한 임시 디렉터리 EPERM 진단은 제품 실패가 아닙니다.\n\n## 검증 근거\n같은 실행의 `verification.json`은 `status: pass`, `passed: true`, `authorized: true`입니다. 설정된 다섯 명령이 모두 종료값 0으로 통과했습니다. 파이썬 테스트 56개, MCP smoke, 브라우저 테스트 7개가 통과했습니다.\n\n정적 검토에서도 실제 미충족 기준을 발견하지 못했습니다. 69개 여행지와 서로 다른 JPEG 배경을 확인했습니다. Gmarket Sans 세 굵기를 확인했습니다. 파리 출발, 이동, 빈 도착 순서를 확인했습니다. 2,000킬로미터 이상 이동일의 도착 후 휴식을 확인했습니다. 토큰 오류 구조화와 서버 격리를 확인했습니다. 계획 식별자, 정확한 Google Maps 경로, FX 상태, 시계, 회화, 320픽셀 화면, 악성 문자열 방어와 자동 검증 정의를 확인했습니다.\n\n이전 공식 지도 주소의 출발지·도착지 불일치 결함은 닫혔습니다. 뷰어와 독립 내보내기는 URL의 출발지, 도착지와 이동수단이 실제 인접 활동과 일치하지 않으면 공식 URL을 재생성합니다. WRONG 값을 직접 주입하는 두 회귀 정의가 현재 실행에서 통과했습니다.\n\n## 남은 위험과 실패 시 조치\n로컬 회귀는 외부 FX 서비스와 Google Maps의 미래 가용성을 보증하지 않습니다. 이후 검증 명령 하나라도 실패하면 릴리스를 중단합니다. HEAD가 바뀌거나 작업 트리가 더러워지면 현재 증거를 재사용하지 않습니다. 깨끗한 체크아웃에서 새 Relay10 실행을 시작합니다. 실제 결함이면 별도 커밋에서 수정과 회귀를 추가한 뒤 다섯 명령을 다시 검증합니다.\n\n## 다음 단계\n커밋 `6cfd8a8`의 RELEASE를 진행할 수 있습니다. 현재 실행의 `verification.json`과 이 reviewer 판정을 함께 보존합니다. 독자 열 명 점검은 문서 명료도만 판단하며 검증 결과와 reviewer의 사실 판정을 뒤집지 않는다.\n\nMCP: 모델 컨텍스트 프로토콜. HTTP: 웹 통신 규약. HTTPS: 암호화된 웹 통신 규약. FX: 환율 기능. CI: 변경 사항 자동 검증. XSS: 악성 스크립트 삽입 공격. EPERM: 권한 부족 진단. PASS: 검증 통과. FAIL: 검증 실패. HEAD: 현재 커밋. JPEG: 사진 파일 형식. MIME: 파일 형식 식별 방식. WOFF2: 웹 글꼴 파일 형식. WRONG: 잘못된 검증값. CSS: 화면 모양을 정하는 언어. DOM: 브라우저 문서 구조. JSON: 구조화 데이터 형식. PR: 변경 검토 요청. LICENSES: 라이선스 파일 폴더. OFL-1: 공개 글꼴 라이선스 버전 표기. HTML-: 웹 문서 형식 접두어. HTML: 웹 문서 형식. API: 프로그램 간 연결 규칙. URL: 웹 주소. UTC: 세계 표준시. KRW: 원화. JPY: 엔화. CLI: 명령줄 도구. CSP: 콘텐츠 보안 정책. CORS: 웹 출처 접근 정책. JS: 자바스크립트. UUID: 고유 식별자. README: 저장소 안내 문서. PYTHON: 파이썬 실행 환경 변수. NO_COLOR: 색상 비활성화 환경 변수. FORCE_COLOR: 색상 강제 환경 변수. READ-ONLY: 읽기 전용. RELEASE: 릴리스. EVIDENCE: 증거. AUDIT: 감사. NOT: 부정 조건. A-: 출발지 표기의 일부.&quot;,<br>  &quot;findings&quot;: [],<br>  &quot;acceptance_checks&quot;: [<br>    {<br>      &quot;criterion&quot;: &quot;현재 커밋이 6cfd8a8이고 작업 트리가 깨끗하다.&quot;,<br>      &quot;passed&quot;: true,<br>      &quot;evidence&quot;: &quot;`git rev-parse HEAD`는 `6cfd8a8a87e4fb62eab552ce59706ac02b03aaaf`를 출력했다. 감사 시작과 종료 시 `git status --short`의 변경 파일 출력은 비어 있었다.&quot;<br>    },<br>    {<br>      &quot;criterion&quot;: &quot;같은 실행에서 설정된 다섯 검증 명령이 모두 통과했다.&quot;,<br>      &quot;passed&quot;: true,<br>      &quot;evidence&quot;: &quot;`.relay10/runs/20260714T052703057Z-0798c1ea/verification.json`은 `status: pass`, `passed: true`, `authorized: true`이며 5개 검사가 모두 `passed: true`, `exit=0`이다. 명령 순서는 `relay10.config.json`의 다섯 정의와 일치한다.&quot;<br>    },<br>    {<br>      &quot;criterion&quot;: &quot;maker가 제품 파일을 변경하지 않았다.&quot;,<br>      &quot;passed&quot;: true,<br>      &quot;evidence&quot;: &quot;`.relay10/runs/20260714T052703057Z-0798c1ea/maker.md`는 제품 파일을 변경하지 않았다고 기록한다. 현재 `git status --short`도 비어 있다.&quot;<br>    },<br>    {<br>      &quot;criterion&quot;: &quot;입력 도시와 일정에 따라 계획이 바뀌며 69개 여행지를 지원한다.&quot;,<br>      &quot;passed&quot;: true,<br>      &quot;evidence&quot;: &quot;`planner/engine.py:251-309`는 도시 언급, 기간, 날짜와 취향을 해석해 구간별 계획을 만든다. `tests/test_catalog.py:39-47`은 69개 한글 도시명을 모두 해석한다. `tests/test_tokens_mutation.py:31-48`은 69개 도시 각각의 계획, 토큰과 내보내기를 검증하며 pytest 56개가 통과했다.&quot;<br>    },<br>    {<br>      &quot;criterion&quot;: &quot;69개 여행지가 서로 다른 사진 배경을 사용한다.&quot;,<br>      &quot;passed&quot;: true,<br>      &quot;evidence&quot;: &quot;`planner/catalog.py:33-37`은 카탈로그 수를 69개로 강제한다. `tests/test_catalog.py:9-21`은 69개 JPEG 경로가 모두 고유하고 실제 파일인지 검사한다. 읽기 전용 SHA-256 확인에서도 `viewer/assets/heroes/*.jpg`의 69개 해시가 각각 한 번만 나타났다. MCP smoke는 모든 사진의 JPEG MIME과 파일 시그니처를 검사하고 통과했다.&quot;<br>    },<br>    {<br>      &quot;criterion&quot;: &quot;로컬 Gmarket Sans 세 굵기가 제공된다.&quot;,<br>      &quot;passed&quot;: true,<br>      &quot;evidence&quot;: &quot;`viewer/styles.css:1-3`은 로컬 WOFF2 파일을 300, 500, 700 굵기로 정의한다. `tests/test_catalog.py:24-28`은 세 파일과 `LICENSES/GmarketSans-OFL-1.1.txt`를 확인한다. 브라우저 회귀는 세 굵기의 실제 로드를 검사했고 7개 전체가 통과했다.&quot;<br>    },<br>    {<br>      &quot;criterion&quot;: &quot;파리에서 빈으로 이동하는 날의 활동 순서가 정확하다.&quot;,<br>      &quot;passed&quot;: true,<br>      &quot;evidence&quot;: &quot;`planner/engine.py:378-420`은 출발 도시 오전 활동, 13시 이동, 도착 도시 저녁 활동 순으로 구성한다. `tests/test_engine.py:82-123`과 `scripts/smoke_mcp.py:151-171,356-409`은 파리→빈 경계의 도시, 시각, 단일 전환과 경로 연결을 직접 검사한다. pytest와 MCP smoke가 통과했다.&quot;<br>    },<br>    {<br>      &quot;criterion&quot;: &quot;2,000킬로미터 이상 장거리 도착일에는 관광 대신 휴식을 둔다.&quot;,<br>      &quot;passed&quot;: true,<br>      &quot;evidence&quot;: &quot;`planner/engine.py:131-188`은 기준을 2,000킬로미터로 정의한다. `planner/engine.py:392-420`은 장거리이면 도착 관광을 추가하지 않고 휴식 권장 문구를 둔다. `tests/test_engine.py:125-168`은 도쿄-타이베이, 도쿄-파리, 로스앤젤레스-도쿄 사례를 검사하며 pytest가 통과했다.&quot;<br>    },<br>    {<br>      &quot;criterion&quot;: &quot;잘못된 토큰은 구조화 오류가 되고 도구 서버는 격리된다.&quot;,<br>      &quot;passed&quot;: true,<br>      &quot;evidence&quot;: &quot;`planner/tokens.py:44-76`과 `planner/engine.py:955-1120`은 크기, 식별자와 중첩 구조를 검증해 TokenError를 낸다. `server.py:345-346,652-667`은 이를 구조화 응답으로 변환한다. `scripts/smoke_mcp.py:424-438`은 악성 토큰 오류 뒤 정상 `get_plan` 호출이 성공하는지 검사하며 MCP smoke가 통과했다.&quot;<br>    },<br>    {<br>      &quot;criterion&quot;: &quot;뷰어는 유효한 계획 식별자와 개정값을 요구한다.&quot;,<br>      &quot;passed&quot;: true,<br>      &quot;evidence&quot;: &quot;`viewer/app.js:37-43,75-84,153-192`는 비어 있지 않은 `plan_id`와 양의 정수 `revision`을 요구한다. `tests/browser/browser-gate.spec.mjs:375-398`은 공백 식별자와 0, 음수, 불리언, 소수, 문자열 개정값을 거부하는지 검사하며 브라우저 테스트가 통과했다.&quot;<br>    },<br>    {<br>      &quot;criterion&quot;: &quot;Google Maps 경로가 정확한 출발지와 도착지 및 세 이동수단을 사용한다.&quot;,<br>      &quot;passed&quot;: true,<br>      &quot;evidence&quot;: &quot;`planner/engine.py:135-152,910-952`는 인접 활동의 `map_query`를 출발지와 도착지로 사용해 transit, walking, driving URL을 만든다. `tests/test_engine.py:45-60`과 `tests/test_tokens_mutation.py:198-224`은 호스트, 양 끝점과 이동수단을 검사하며 pytest가 통과했다.&quot;<br>    },<br>    {<br>      &quot;criterion&quot;: &quot;잘못된 공식 지도 주소를 뷰어와 독립 내보내기에서 재생성하며 이전 결함을 회귀로 막는다.&quot;,<br>      &quot;passed&quot;: true,<br>      &quot;evidence&quot;: &quot;`viewer/app.js:117-136,198-225,662-675`와 `planner/render.py:115-144,222-255,426-482`는 URL의 쿼리가 기대 양 끝점 및 이동수단과 다르면 공식 주소를 재생성한다. `tests/test_tokens_mutation.py:313-387`과 `tests/browser/browser-gate.spec.mjs:375-447`은 WRONG 출발지·도착지를 직접 주입하고 제거 여부를 검사한다. pytest와 브라우저 검증이 모두 통과했다.&quot;<br>    },<br>    {<br>      &quot;criterion&quot;: &quot;환율의 실시간, 오류, 오프라인, 저장값 없음 상태를 구분한다.&quot;,<br>      &quot;passed&quot;: true,<br>      &quot;evidence&quot;: &quot;`planner/live_data.py:137-178`은 live와 unavailable 결과를 명시한다. `viewer/app.js:380-525,797-815`와 `planner/render.py:608-677`은 snapshot 유지, 오류, 오프라인과 정상 snapshot 없음 상태를 구분하고 계산기를 제어한다. `tests/browser/browser-gate.spec.mjs:350-372,450-471`의 관련 회귀가 통과했다.&quot;<br>    },<br>    {<br>      &quot;criterion&quot;: &quot;서울과 현지 시계가 갱신되고 기본 회화가 제공된다.&quot;,<br>      &quot;passed&quot;: true,<br>      &quot;evidence&quot;: &quot;`planner/engine.py:467-520`은 서울·현지 시간대와 도시별 회화를 반환한다. `viewer/app.js:348-378,532-546`은 두 시계를 매초 갱신한다. `tests/test_engine.py:192-219`은 69개 도시의 시간대와 회화를 검사하고 `tests/browser/browser-gate.spec.mjs:260-282,323-347`은 실제 시계 갱신을 검사한다. 두 검증군이 통과했다.&quot;<br>    },<br>    {<br>      &quot;criterion&quot;: &quot;320픽셀 화면에서 가로 넘침과 작은 조작 요소가 없다.&quot;,<br>      &quot;passed&quot;: true,<br>      &quot;evidence&quot;: &quot;`viewer/styles.css:7-17,97-103`은 가로 넘침 방지, 최소 44픽셀 조작 영역과 좁은 화면 레이아웃을 정의한다. `tests/browser/browser-gate.spec.mjs:178-201,293-320`은 390픽셀과 320픽셀의 뷰어·독립 내보내기·긴 제목을 검사하며 통과했다.&quot;<br>    },<br>    {<br>      &quot;criterion&quot;: &quot;악성 문자열이 실행되지 않고 일반 텍스트로 남는다.&quot;,<br>      &quot;passed&quot;: true,<br>      &quot;evidence&quot;: &quot;`viewer/app.js:23-27,285-312,634-659`은 DOM 생성과 `textContent`를 사용한다. `planner/render.py:268-277,280-285,426-457`은 스크립트 JSON과 HTML을 이스케이프한다. `tests/browser/browser-gate.spec.mjs:474-492`은 script와 img onerror 주입이 실행되지 않는지 검사하며 통과했다.&quot;<br>    },<br>    {<br>      &quot;criterion&quot;: &quot;Relay10과 CI 자동 검증 정의가 요구 테스트 범위를 포함한다.&quot;,<br>      &quot;passed&quot;: true,<br>      &quot;evidence&quot;: &quot;`relay10.config.json`은 diff, JS 구문, pytest, MCP smoke와 브라우저 회귀 다섯 명령을 정의한다. `.github/workflows/test.yml:10-39`은 PR과 push에서 pytest, MCP smoke와 Playwright를 실행한다. `package.json:4-9`과 `pyproject.toml:13-15`도 해당 테스트 진입점을 고정한다.&quot;<br>    }<br>  ]<br>}</p></details>
+      
+    </article><article class="stage" aria-labelledby="stage-4">
+      <header><div><p class="eyebrow">단계 5</p><h3 id="stage-4">Create the final human-facing HTML explanation.</h3></div><span class="status status--pass"><span aria-hidden="true">●</span> 통과</span></header>
+      
+      <dl class="facts"><div><dt>프로필</dt><dd>balanced</dd></div><div><dt>모델</dt><dd>gpt-5.6-terra</dd></div><div><dt>소요시간</dt><dd>45710</dd></div></dl>
+      <details><summary>출력 보기</summary><p class="stage-output"># 릴리스 증거 감사</p>
+<p class="stage-output">결론: **PASS**입니다. 목적은 커밋 `6cfd8a8`의 릴리스 증거와 구현을 읽기 전용으로 확인하는 것입니다.</p>
+<p class="stage-output">## 전제조건과 실행 환경</p>
+<p class="stage-output">HEAD는 `6cfd8a8a87e4fb62eab552ce59706ac02b03aaaf`입니다.  <br>작업 트리는 비어 있습니다. 제품 파일 변경은 없습니다.</p>
+<p class="stage-output">현재 실행의 `verification.json`이 있습니다.  <br>`status: pass`, `passed: true`, `authorized: true`입니다.  <br>검증은 설정된 다섯 명령만 실행한 기록입니다.</p>
+<p class="stage-output">## 검증 근거</p>
+<p class="stage-output">다섯 명령이 모두 종료값 0으로 통과했습니다.</p>
+<p class="stage-output">- `git diff --check`<br>- `node --check viewer/app.js`<br>- `../.venv/bin/python -m pytest`: 56개 통과<br>- `../.venv/bin/python scripts/smoke_mcp.py`<br>- `npm run test:browser`: 7개 통과</p>
+<p class="stage-output">reviewer는 명령을 다시 실행하지 않고 같은 실행의 증거, 소스, 테스트 정의를 읽었습니다.  <br>69개 여행지와 고유 JPEG 배경을 확인했습니다.  <br>로컬 Gmarket Sans 300·500·700 WOFF2를 확인했습니다.  <br>파리 출발, 이동, 빈 도착의 순서와 2,000킬로미터 이상 이동일의 휴식을 확인했습니다.  <br>구조화된 토큰 오류, 도구 서버 격리, 계획 식별자 검사를 확인했습니다.  <br>Google Maps의 출발지·도착지와 대중교통·도보·자동차 경로를 확인했습니다.  <br>뷰어와 독립 내보내기가 `WRONG` 지도 주소를 재생성하는 회귀 정의를 확인했습니다.  <br>FX 상태, 서울·현지 시계, 기본 회화, 320픽셀 화면, XSS 방어, CI 정의를 확인했습니다.</p>
+<p class="stage-output">## 남은 위험과 실패 시 조치</p>
+<p class="stage-output">로컬 회귀는 외부 FX 서비스와 Google Maps의 미래 가용성을 보장하지 않습니다.  <br>Git의 임시 디렉터리 EPERM 진단은 이 읽기 전용 환경의 제한입니다. 제품 실패로 판단하지 않습니다.</p>
+<p class="stage-output">검증 명령 하나라도 실패하면 RELEASE를 중단합니다.  <br>HEAD가 바뀌거나 작업 트리가 더러워지면 이 증거를 폐기합니다.  <br>깨끗한 체크아웃에서 새 Relay10 실행을 시작합니다.  <br>실제 결함이면 별도 커밋에서 수정과 회귀를 추가한 뒤 다시 검증합니다.</p>
+<p class="stage-output">## 다음 단계</p>
+<p class="stage-output">커밋 `6cfd8a8`의 RELEASE를 진행할 수 있습니다.  <br>현재 `verification.json`과 reviewer 판정을 함께 보존합니다.  <br>독자 열 명 점검은 문서 명료도만 판단합니다. 검증 결과와 reviewer의 사실 판정을 바꾸지 않습니다.</p>
+<p class="stage-output">MCP: 모델 컨텍스트 프로토콜. HTTP: 웹 통신 규약. HTTPS: 암호화된 웹 통신 규약. FX: 환율 기능. CI: 변경 사항 자동 검증. XSS: 악성 스크립트 삽입 공격. EPERM: 권한 부족 진단. PASS: 검증 통과. FAIL: 검증 실패. HEAD: 현재 커밋. JPEG: 사진 파일 형식. MIME: 파일 형식 식별 방식. WOFF2: 웹 글꼴 파일 형식. WRONG: 잘못된 검증값. CSS: 화면 모양을 정하는 언어. DOM: 브라우저 문서 구조. JSON: 구조화 데이터 형식. PR: 변경 검토 요청. LICENSES: 라이선스 파일 폴더. OFL-1: 공개 글꼴 라이선스 버전 표기. HTML-: 웹 문서 형식 접두어. HTML: 웹 문서 형식. API: 프로그램 간 연결 규칙. URL: 웹 주소. UTC: 세계 표준시. KRW: 원화. JPY: 엔화. CLI: 명령줄 도구. CSP: 콘텐츠 보안 정책. CORS: 웹 출처 접근 정책. JS: 자바스크립트. UUID: 고유 식별자. README: 저장소 안내 문서. PYTHON: 파이썬 실행 환경 변수. NO_COLOR: 색상 비활성화 환경 변수. FORCE_COLOR: 색상 강제 환경 변수. READ-ONLY: 읽기 전용. RELEASE: 릴리스. EVIDENCE: 증거. AUDIT: 감사. NOT: 부정 조건. A-: 출발지 표기의 일부.</p></details>
+      
+    </article></div></section>
+    <section id="verification" aria-labelledby="verification-title"><p class="eyebrow">04 · 품질 확인</p><h2 id="verification-title">검증 결과</h2><p>실패나 오류가 있으면 아래 세부 기록과 다음 단계에서 복구 방법을 확인하세요.</p><ul class="check-list"><li><div><span class="status status--pass"><span aria-hidden="true">●</span> 통과</span><strong>git diff --check</strong></div><p>exit=0</p></li><li><div><span class="status status--pass"><span aria-hidden="true">●</span> 통과</span><strong>node --check viewer/app.js</strong></div><p>exit=0</p></li><li><div><span class="status status--pass"><span aria-hidden="true">●</span> 통과</span><strong>../.venv/bin/python -m pytest</strong></div><p>exit=0
+........................................................                 [100%]
+56 passed in 0.38s
+</p></li><li><div><span class="status status--pass"><span aria-hidden="true">●</span> 통과</span><strong>../.venv/bin/python scripts/smoke_mcp.py</strong></div><p>exit=0
+PASS travel MCP Streamable HTTP smoke (http://127.0.0.1:60504)
+</p></li><li><div><span class="status status--pass"><span aria-hidden="true">●</span> 통과</span><strong>npm run test:browser</strong></div><p>exit=0
+
+&gt; test:browser
+&gt; playwright test --config=tests/browser/playwright.config.mjs
+
+
+Running 7 tests using 1 worker
+
+
+
+[1/7] tests/browser/browser-gate.spec.mjs:260:1 › viewer loads official Gmarket Sans and switches Paris/Vienna state without runtime errors
+[2/7] tests/browser/browser-gate.spec.mjs:293:1 › viewer and standalone export stay within 390/320px and keep visible actions at least 44px high
+[3/7] tests/browser/browser-gate.spec.mjs:323:1 › standalone export loads embedded Gmarket assets, clocks, and city-specific background/content
+[4/7] tests/browser/browser-gate.spec.mjs:350:1 › offline mode is explicit and file export retains its saved FX snapshot
+[5/7] tests/browser/browser-gate.spec.mjs:375:1 › viewer rejects invalid plan identity and regenerates official Google Maps fallback routes
+[6/7] tests/browser/browser-gate.spec.mjs:450:1 › FX refresh error retains a snapshot and disables a calculator with no snapshot
+[7/7] tests/browser/browser-gate.spec.mjs:474:1 › malicious content token remains inert text
+  7 passed (13.7s)
+
+(node:40226) Warning: The &#39;NO_COLOR&#39; env is ignored due to the &#39;FORCE_COLOR&#39; env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+</p></li></ul></section>
+    <section id="reader10" aria-labelledby="reader10-title"><p class="eyebrow">05 · 보고서 검수</p><h2 id="reader10-title">Reader-10 검수</h2><p>선택된 모드의 구조 규칙 또는 모델 응답을 집계한 결과이며, 사실성 검증을 대신하지 않습니다.</p><p class="reader-mode"><strong>검수 방식:</strong> 자동 구조 모드: 모델을 호출하지 않고 HTML 구조, 길이, 용어, 링크, 행동 신호와 접근성 규칙만 검사합니다. 아래 점수는 실제 모델 독자 점수가 아니며 의미 이해나 사실 정확성을 증명하지 않습니다.</p>
+    <div class="reader-summary">
+      <div><span class="status status--pass"><span aria-hidden="true">●</span> 통과</span><strong>10/10 자동 구조 프로필 통과</strong></div>
+      <p>치명적 문제 0개 · 요구 기준 9/10</p>
+    </div>
+    <ul class="persona-grid"><li>
+        <div><span class="status status--pass"><span aria-hidden="true">●</span> 통과</span><strong>30초 독자</strong></div>
+        <p>제목, 목적, 핵심 결과만 훑어보는 독자</p>
+        <p class="muted">발견된 이해도 문제가 없습니다.</p>
+      </li><li>
+        <div><span class="status status--pass"><span aria-hidden="true">●</span> 통과</span><strong>도메인 초보자</strong></div>
+        <p>전문용어 배경지식이 없는 독자</p>
+        <p class="muted">발견된 이해도 문제가 없습니다.</p>
+      </li><li>
+        <div><span class="status status--pass"><span aria-hidden="true">●</span> 통과</span><strong>쉬운 문장 독자</strong></div>
+        <p>짧고 직접적인 문장을 선호하는 독자</p>
+        <p class="muted">발견된 이해도 문제가 없습니다.</p>
+      </li><li>
+        <div><span class="status status--pass"><span aria-hidden="true">●</span> 통과</span><strong>비원어민 독자</strong></div>
+        <p>명시적 구조와 용어 설명이 필요한 독자</p>
+        <p class="muted">발견된 이해도 문제가 없습니다.</p>
+      </li><li>
+        <div><span class="status status--pass"><span aria-hidden="true">●</span> 통과</span><strong>문자 그대로 읽는 독자</strong></div>
+        <p>모호한 지시어를 추측하지 않는 독자</p>
+        <p class="muted">발견된 이해도 문제가 없습니다.</p>
+      </li><li>
+        <div><span class="status status--pass"><span aria-hidden="true">●</span> 통과</span><strong>모바일 독자</strong></div>
+        <p>좁은 화면에서 제목과 목록을 훑는 독자</p>
+        <p class="muted">발견된 이해도 문제가 없습니다.</p>
+      </li><li>
+        <div><span class="status status--pass"><span aria-hidden="true">●</span> 통과</span><strong>스크린리더 독자</strong></div>
+        <p>문서 의미 구조와 대체 텍스트에 의존하는 독자</p>
+        <p class="muted">발견된 이해도 문제가 없습니다.</p>
+      </li><li>
+        <div><span class="status status--pass"><span aria-hidden="true">●</span> 통과</span><strong>근거 확인 독자</strong></div>
+        <p>수치와 결론의 검증 근거를 찾는 독자</p>
+        <p class="muted">발견된 이해도 문제가 없습니다.</p>
+      </li><li>
+        <div><span class="status status--pass"><span aria-hidden="true">●</span> 통과</span><strong>실행 담당자</strong></div>
+        <p>보고서를 읽고 바로 행동해야 하는 독자</p>
+        <p class="muted">발견된 이해도 문제가 없습니다.</p>
+      </li><li>
+        <div><span class="status status--pass"><span aria-hidden="true">●</span> 통과</span><strong>결론 우선 독자</strong></div>
+        <p>본문보다 요약과 최종 상태를 먼저 읽는 독자</p>
+        <p class="muted">발견된 이해도 문제가 없습니다.</p>
+      </li></ul></section>
+    <section id="evidence" aria-labelledby="evidence-title"><p class="eyebrow">06 · 추적 가능성</p><h2 id="evidence-title">근거와 출처</h2><ol class="evidence-list"><li><span>Relay10 설정</span><p>다섯 검증 명령이 정의되어 있습니다: diff 검사, JavaScript 구문 검사, pytest, MCP smoke, 브라우저 테스트.</p><p class="muted">안전하지 않거나 지원하지 않는 URL은 생략했습니다.</p></li><li><span>현재 실행 로그</span><p>현재 실행의 다섯 명령 결과와 환경 권한 오류가 기록되어 있습니다.</p><p class="muted">안전하지 않거나 지원하지 않는 URL은 생략했습니다.</p></li><li><span>이전 통과 verification.json</span><p>status=pass, passed=true, 다섯 checks 모두 exit=0으로 기록되어 있습니다.</p><p class="muted">안전하지 않거나 지원하지 않는 URL은 생략했습니다.</p></li><li><span>이전 reviewer 판정</span><p>HEAD 6cfd8a8의 릴리스 증거 감사 통과와 주요 수용 기준별 근거가 기록되어 있습니다.</p><p class="muted">안전하지 않거나 지원하지 않는 URL은 생략했습니다.</p></li><li><span>카탈로그 정의</span><p>69개 여행지 수와 고유 배경 자산을 강제하는 소스입니다.</p><p class="muted">안전하지 않거나 지원하지 않는 URL은 생략했습니다.</p></li><li><span>브라우저 회귀 정의</span><p>도시 전환, 글꼴, 320픽셀, FX, 지도 경로 재생성, XSS를 검증하는 테스트 정의입니다.</p><p class="muted">안전하지 않거나 지원하지 않는 URL은 생략했습니다.</p></li></ol></section>
+    <section id="actions" aria-labelledby="actions-title"><p class="eyebrow">07 · 실행 안내</p><h2 id="actions-title">다음 단계</h2><p>필요한 조치를 순서대로 실행하고, 문제가 생기면 검증 결과의 오류 또는 대안 기록을 먼저 확인하세요.</p><ol><li>report.html에서 변경 결과, 근거, 남은 위험을 사람이 최종 확인합니다.</li></ol></section>
+  </main>
+  <footer class="shell"><p>이 파일은 외부 스크립트나 스타일시트 없이 생성된 자체 포함 Relay10 보고서입니다.</p></footer>
+</body>
+</html>

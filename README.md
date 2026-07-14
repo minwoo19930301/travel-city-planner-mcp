@@ -131,6 +131,8 @@ npm run test:browser
 
 저장소 루트의 `relay10.config.json`이 scout → architect → maker → reviewer → explainer 역할, 위험도 기반 모델·reasoning 라우팅, 최대 모델 호출 수, deterministic Reader-10 명료도 검사, 테스트·MCP smoke 검증을 고정합니다. `.relay10/` 실행 기록은 로컬에만 남고 설정은 버전 관리합니다.
 
+최종 읽기 전용 릴리스 감사 `20260714T052703057Z-0798c1ea`는 제품 커밋 `6cfd8a8`을 대상으로 실행했습니다. 설정된 검증 5/5, reviewer 발견 사항 0개, Reader-10 10/10, 치명적 명료도 문제 0개로 전체 통과했습니다. 공개용 동결 사본은 [최종 HTML 리포트](docs/relay10/final-report.html), [검증 결과](docs/relay10/verification.json), [reviewer 판정](docs/relay10/reviewer.json), [Reader-10 결과](docs/relay10/readers.json)에 있습니다.
+
 ```bash
 git clone https://github.com/minwoo19930301/relay10
 cd relay10 && npm link
