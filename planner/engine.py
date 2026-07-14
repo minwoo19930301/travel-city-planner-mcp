@@ -152,12 +152,17 @@ def _route_options(origin: str, destination: str) -> dict[str, str]:
 
 def _validate_web_url(value: Any, field_name: str) -> None:
     """Reject executable or credential-bearing links recovered from untrusted tokens."""
-    if value in {None, ""}:
+    if value is None or value == "":
         return
-    text = str(value).strip()
+    if not isinstance(value, str):
+        raise TokenError(f"{field_name} must be a URL string")
+    text = value.strip()
     if any(ord(char) < 32 or ord(char) == 127 for char in text):
         raise TokenError(f"{field_name} contains control characters")
-    parsed = urlsplit(text)
+    try:
+        parsed = urlsplit(text)
+    except ValueError as exc:
+        raise TokenError(f"{field_name} is not a valid URL") from exc
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise TokenError(f"{field_name} must be an absolute http(s) URL")
     if parsed.username or parsed.password:
@@ -166,10 +171,18 @@ def _validate_web_url(value: Any, field_name: str) -> None:
 
 def _validate_google_maps_url(value: Any, field_name: str) -> None:
     _validate_web_url(value, field_name)
-    if value in {None, ""}:
+    if value is None or value == "":
         return
-    parsed = urlsplit(str(value).strip())
-    if parsed.scheme != "https" or parsed.hostname != "www.google.com":
+    parsed = urlsplit(value.strip())
+    try:
+        has_non_default_port = parsed.port is not None
+    except ValueError as exc:
+        raise TokenError(f"{field_name} contains an invalid port") from exc
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname != "www.google.com"
+        or has_non_default_port
+    ):
         raise TokenError(f"{field_name} must use the official Google Maps host")
     if not parsed.path.startswith("/maps/"):
         raise TokenError(f"{field_name} must be a Google Maps URL")
@@ -317,25 +330,51 @@ class PlannerService:
                         "activities": [],
                     },
                 )
-                if destination["id"] not in plan_day["destination_ids"]:
-                    plan_day["destination_ids"].append(destination["id"])
-                if len(plan_day["destination_ids"]) > 1:
-                    previous = self.catalog.get(plan_day["destination_ids"][-2])
+                if plan_day["destination_ids"] and destination["id"] not in plan_day["destination_ids"]:
+                    previous = self.catalog.get(plan_day["destination_ids"][-1])
                     transfer_title = f"{previous['cityKo']} → {destination['cityKo']} 이동"
-                    if not any(item["title"] == transfer_title for item in plan_day["activities"]):
-                        plan_day["activities"].append(
-                            self._activity(
-                                destination=destination,
-                                time="13:00",
-                                title=transfer_title,
-                                location=f"{previous['city']} to {destination['city']}",
-                                icon="train-front",
-                                memo="다도시 구간 이동일",
-                                source="generated-transfer",
-                            )
-                        )
+                    origin_activities = plan_day["activities"]
+                    morning_options = [
+                        activity for activity in origin_activities
+                        if activity["time"] < "12:00"
+                    ]
+                    origin_morning = copy.deepcopy(
+                        (morning_options or origin_activities)[-1]
+                    )
+                    if origin_morning["time"] >= "12:00":
+                        origin_morning["time"] = "10:00"
+
+                    destination_activities = city_day["activities"]
+                    evening_options = [
+                        activity for activity in destination_activities
+                        if activity["time"] >= "17:00"
+                    ]
+                    destination_evening = copy.deepcopy(
+                        (evening_options or destination_activities)[-1]
+                    )
+                    if destination_evening["time"] < "17:00":
+                        destination_evening["time"] = "18:00"
+
+                    transfer = self._activity(
+                        destination=destination,
+                        time="13:00",
+                        title=transfer_title,
+                        location=f"{previous['city']} to {destination['city']}",
+                        icon="train-front",
+                        memo="다도시 구간 이동일",
+                        source="generated-transfer",
+                    )
+                    plan_day["destination_ids"].append(destination["id"])
+                    plan_day["activities"] = [
+                        origin_morning,
+                        transfer,
+                        destination_evening,
+                    ]
                     plan_day["title"] = transfer_title
-                plan_day["activities"].extend(city_day["activities"])
+                else:
+                    if destination["id"] not in plan_day["destination_ids"]:
+                        plan_day["destination_ids"].append(destination["id"])
+                    plan_day["activities"].extend(city_day["activities"])
             global_offset += nights
 
         days = [day_map[index] for index in sorted(day_map)]
@@ -674,12 +713,29 @@ class PlannerService:
         legs are never rewritten here, so malformed/tampered new tokens still fail
         validation instead of being silently repaired.
         """
-        for day in plan.get("days", []):
-            if "legs" not in day and isinstance(day.get("activities"), list):
+        days = plan.get("days")
+        if not isinstance(days, list):
+            return
+        for day in days:
+            if not isinstance(day, dict):
+                continue
+            activities = day.get("activities")
+            if (
+                "legs" not in day
+                and isinstance(activities, list)
+                and all(
+                    isinstance(activity, dict)
+                    and all(
+                        isinstance(activity.get(field), str)
+                        for field in ("id", "title", "location")
+                    )
+                    for activity in activities
+                )
+            ):
                 day["legs"] = [
                     self._build_leg(origin, destination)
                     for origin, destination in zip(
-                        day["activities"], day["activities"][1:]
+                        activities, activities[1:]
                     )
                 ]
 
@@ -851,26 +907,83 @@ class PlannerService:
     def _validate_plan(self, plan: dict[str, Any]) -> None:
         if plan.get("schema_version") != 1:
             raise TokenError("unsupported plan schema")
+        if not isinstance(plan.get("segments"), list) or not plan["segments"]:
+            raise TokenError("plan contains no segments")
         if not isinstance(plan.get("days"), list) or not plan["days"]:
             raise TokenError("plan contains no days")
-        for segment in plan.get("segments", []):
-            self.catalog.get(segment["destination_id"])
+        if not isinstance(plan.get("catalog"), dict) or not isinstance(plan["catalog"].get("digest"), str):
+            raise TokenError("plan catalog metadata is missing")
+        if not isinstance(plan.get("live_data"), dict):
+            raise TokenError("plan live-data metadata is missing")
+        if not isinstance(plan.get("title"), str) or not plan["title"].strip():
+            raise TokenError("plan title is missing")
+        if not isinstance(plan.get("duration"), dict):
+            raise TokenError("plan duration is missing")
+        if not isinstance(plan.get("pace"), str) or not isinstance(plan.get("preferences"), list):
+            raise TokenError("plan preferences are missing")
+        for segment in plan["segments"]:
+            if not isinstance(segment, dict) or not isinstance(segment.get("destination_id"), str):
+                raise TokenError("segment destination is missing")
+            required_segment_fields = (
+                "id", "city", "city_ko", "country_ko", "currency", "time_zone",
+            )
+            numeric_segment_fields = ("nights", "days", "day_start", "day_end")
+            if any(not isinstance(segment.get(key), str) or not segment[key].strip() for key in required_segment_fields):
+                raise TokenError("segment is missing required fields")
+            if any(not isinstance(segment.get(key), int) or isinstance(segment[key], bool) for key in numeric_segment_fields):
+                raise TokenError("segment duration is invalid")
+            if any(segment.get(key) is not None and not isinstance(segment[key], str) for key in ("start_date", "end_date")):
+                raise TokenError("segment date is invalid")
+            try:
+                self.catalog.get(segment["destination_id"])
+            except CatalogError as exc:
+                raise TokenError("segment destination is unknown") from exc
         for day in plan["days"]:
+            if not isinstance(day, dict):
+                raise TokenError("plan day must be an object")
+            if not isinstance(day.get("day"), int) or isinstance(day["day"], bool):
+                raise TokenError("plan day number is invalid")
+            if not isinstance(day.get("title"), str):
+                raise TokenError("plan day title is missing")
+            if not isinstance(day.get("destination_ids"), list) or not all(
+                isinstance(destination_id, str) for destination_id in day["destination_ids"]
+            ):
+                raise TokenError("plan day destinations are invalid")
+            for destination_id in day["destination_ids"]:
+                try:
+                    self.catalog.get(destination_id)
+                except CatalogError as exc:
+                    raise TokenError("plan day destination is unknown") from exc
+            if not isinstance(day.get("activities"), list):
+                raise TokenError("plan day activities are invalid")
             _validate_google_maps_url(day.get("route_map_url"), "route_map_url")
-            activities = day.get("activities", [])
-            if day.get("route_map_url") != _route_url(activities):
-                raise TokenError("route_map_url does not match day activities")
+            activities = day["activities"]
             for activity in activities:
+                if not isinstance(activity, dict):
+                    raise TokenError("activity must be an object")
+                required_text = ("id", "destination_id", "time", "title", "location", "map_query")
+                if any(not isinstance(activity.get(key), str) or not activity[key].strip() for key in required_text):
+                    raise TokenError("activity is missing required fields")
+                if activity["destination_id"] not in day["destination_ids"]:
+                    raise TokenError("activity destination does not match its day")
+                try:
+                    self.catalog.get(activity["destination_id"])
+                except CatalogError as exc:
+                    raise TokenError("activity destination is unknown") from exc
                 if activity.get("icon") not in self.allowed_icons:
                     raise TokenError(f"invalid activity icon: {activity.get('icon')}")
                 _validate_google_maps_url(activity.get("map_url"), "map_url")
                 if activity.get("map_url") != _map_search_url(str(activity.get("map_query", ""))):
                     raise TokenError("map_url does not match activity map_query")
+            if day.get("route_map_url") != _route_url(activities):
+                raise TokenError("route_map_url does not match day activities")
             expected_leg_count = max(0, len(activities) - 1)
             legs = day.get("legs")
             if not isinstance(legs, list) or len(legs) != expected_leg_count:
                 raise TokenError("day legs do not match adjacent activities")
             for index, leg in enumerate(legs):
+                if not isinstance(leg, dict):
+                    raise TokenError("leg must be an object")
                 if leg.get("suggested_mode") not in TRAVEL_MODES:
                     raise TokenError("invalid leg suggested_mode")
                 if not isinstance(leg.get("from"), dict) or not isinstance(leg.get("to"), dict):

@@ -6,3 +6,6 @@ dist/
 .DS_Store
 .env
 .relay10/
+node_modules/
+test-results/
+playwright-report/

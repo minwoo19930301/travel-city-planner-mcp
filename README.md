@@ -119,6 +119,14 @@ docker run --rm -p 8000:8000 -e PUBLIC_BASE_URL=http://localhost:8000 travel-cit
 
 `scripts/smoke_mcp.py`는 임의의 로컬 포트에서 실제 Streamable HTTP 서버를 띄워 initialize/listTools/callTool, 알 수 없는 Host 거부, 비도쿄 도시 guide, 기본 회화, 세 이동수단 경로, 도쿄 4-5박 생성, token 복원, revision 충돌, HTML·legacy export, viewer·catalog·live guide 경로까지 왕복 검증합니다.
 
+실제 Chromium 회귀 게이트는 외부 환율·지도 API 대신 로컬 mock을 사용해 viewer와 독립 HTML export를 함께 엽니다. G마켓 산스 로딩·computed font, 파리↔빈 배경/콘텐츠 전환, 1초 시계, 390px·320px overflow, 44px control, 키보드 focus-visible, reduced-motion, offline/file:// snapshot 안내, console error 0, 악성 content token 비실행을 검증합니다.
+
+```bash
+npm ci
+npx playwright install chromium
+npm run test:browser
+```
+
 ## Relay10 하네스
 
 저장소 루트의 `relay10.config.json`이 scout → architect → maker → reviewer → explainer 역할, 위험도 기반 모델·reasoning 라우팅, 최대 모델 호출 수, deterministic Reader-10 명료도 검사, 테스트·MCP smoke 검증을 고정합니다. `.relay10/` 실행 기록은 로컬에만 남고 설정은 버전 관리합니다.
@@ -135,7 +143,7 @@ PYTHON=.venv/bin/python r10 run "사진 배경 여행 viewer와 export를 최종
   --allow-verification-commands
 ```
 
-Reader-10 점수는 문서의 명료도 검사이며 기능·보안의 진실 판정으로 쓰지 않습니다. 최종 통과 여부는 reviewer 판정과 pytest, JavaScript 구문 검사, 실제 MCP Streamable HTTP smoke를 함께 봅니다.
+Reader-10 점수는 문서의 명료도 검사이며 기능·보안의 진실 판정으로 쓰지 않습니다. 최종 통과 여부는 reviewer 판정과 pytest, JavaScript 구문 검사, 실제 MCP Streamable HTTP smoke, Chromium 회귀 게이트를 함께 봅니다.
 
 ## 공유 호환 규격
 

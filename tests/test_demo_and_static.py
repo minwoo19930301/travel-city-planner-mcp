@@ -64,6 +64,18 @@ def test_viewer_exposes_live_clocks_phrases_exchange_and_leg_routes() -> None:
     assert "summary.textContent = destination.summary" in script
     assert "showMapPreview(cityMapSelection(plan, destinationId), false)" in script
     assert "AbortController" in script
+    assert "function safeGoogleMapsUrl" in script
+    assert 'parsed.hostname !== "www.google.com"' in script
+    assert "function dayRouteUrl" in script
+    assert "catalog?.destinationCount !== 69" in script
+    assert 'panel.dataset.exchangeState = "loading"' in script
+    assert 'window.addEventListener("offline"' in script
+    assert "function hasValidPlanIdentity" in script
+    assert 'typeof plan?.plan_id === "string"' in script
+    assert "Boolean(plan.plan_id.trim())" in script
+    assert "Number.isInteger(plan.revision)" in script
+    assert "plan.revision > 0" in script
+    assert "!hasValidPlanIdentity(plan)" in script
     assert "renderSource" not in script
 
 
@@ -95,5 +107,5 @@ def test_viewer_city_background_controls_and_contrast_contract() -> None:
     assert ":focus-visible" in css
     assert "prefers-reduced-motion: reduce" in css
     assert "overflow-x: hidden" in css
-    assert "overflow-wrap: normal" in _css_rule(css, ".cover h1")
+    assert "overflow-wrap: anywhere" in _css_rule(css, ".cover h1")
     assert "word-break: keep-all" in _css_rule(css, ".cover h1")

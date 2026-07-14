@@ -1,5 +1,6 @@
 import asyncio
 import re
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
@@ -24,6 +25,26 @@ def test_content_token_restores_after_new_service_instance() -> None:
     restored = restarted.decode(token)
     assert restored["plan_id"] == plan["plan_id"]
     assert restored["days"] == plan["days"]
+
+
+def test_every_catalog_city_round_trips_a_v1_token_and_export() -> None:
+    async def exercise() -> None:
+        service = PlannerService()
+        restarted = PlannerService()
+        for destination_id in service.catalog.destinations:
+            plan = await service.create_plan(
+                [{"destination_id": destination_id, "nights": 1}],
+                include_live_data=False,
+            )
+            token = service.summarize(plan)["content_token"]
+            restored = restarted.decode(token)
+            assert restored["segments"][0]["destination_id"] == destination_id
+            assert restarted.summarize(restored)["content_token"].startswith("tp1.")
+            assert "<!doctype html>" in render_export_html(
+                restored, restarted.catalog, asset_base_url="/assets/"
+            ).lower()
+
+    run(exercise())
 
 
 def test_revision_conflict_and_map_query_rebuild() -> None:
@@ -79,6 +100,67 @@ def test_tampered_token_rejects_executable_map_urls() -> None:
         service.decode(encode_content_token(plan))
 
 
+def test_tampered_token_rejects_missing_structure_and_google_lookalikes() -> None:
+    service = PlannerService()
+    plan = make_plan(service)
+    plan["segments"] = []
+    with pytest.raises(TokenError, match="no segments"):
+        service.decode(encode_content_token(plan))
+
+    plan = make_plan(service)
+    plan["days"][0]["activities"][0]["map_url"] = "https://www.google.com.evil.test/maps/search/?api=1"
+    with pytest.raises(TokenError, match="official Google Maps host"):
+        service.decode(encode_content_token(plan))
+
+
+@pytest.mark.parametrize(
+    ("path", "malicious_value"),
+    [
+        (("days", 0, "route_map_url"), {}),
+        (("days", 0, "activities", 0, "map_url"), []),
+        (("days", 0, "activities", 0), "not-an-activity"),
+        (("days", 0, "legs", 0), "not-a-leg"),
+        (("days", 0, "legs", 0, "route_urls"), []),
+        (("days", 0, "legs", 0, "from"), []),
+        (("days", 0, "legs", 0, "to"), "not-an-endpoint"),
+    ],
+)
+def test_malicious_nested_token_structures_always_raise_token_error(
+    path: tuple[object, ...], malicious_value: object
+) -> None:
+    service = PlannerService()
+    plan = make_plan(service)
+    parent = plan
+    for key in path[:-1]:
+        parent = parent[key]
+    parent[path[-1]] = malicious_value
+
+    with pytest.raises(TokenError):
+        service.decode(encode_content_token(plan))
+
+
+@pytest.mark.parametrize("malicious_activity", ([], {}, "not-an-activity"))
+def test_malformed_legacy_structure_does_not_crash_during_leg_migration(
+    malicious_activity: object,
+) -> None:
+    service = PlannerService()
+    plan = make_plan(service)
+    plan["days"][0].pop("legs")
+    plan["days"][0]["activities"][0] = malicious_activity
+
+    with pytest.raises(TokenError):
+        service.decode(encode_content_token(plan))
+
+
+def test_content_token_revision_must_be_a_positive_integer() -> None:
+    service = PlannerService()
+    for revision in (0, -1, True, 1.5, "1"):
+        plan = make_plan(service)
+        plan["revision"] = revision
+        with pytest.raises(TokenError, match="plan identity"):
+            service.decode(encode_content_token(plan))
+
+
 def test_legacy_v1_token_without_legs_is_migrated_deterministically() -> None:
     service = PlannerService()
     plan = make_plan(service)
@@ -107,6 +189,18 @@ def test_tampered_leg_url_rejects_non_google_and_mismatched_routes() -> None:
     )
     with pytest.raises(TokenError, match="do not match adjacent activities"):
         service.decode(encode_content_token(plan))
+
+
+def test_google_map_routes_preserve_a_to_b_and_mode_queries() -> None:
+    service = PlannerService()
+    plan = make_plan(service)
+    leg = plan["days"][0]["legs"][0]
+    for mode, url in leg["route_urls"].items():
+        params = parse_qs(urlsplit(url).query)
+        assert params["api"] == ["1"]
+        assert params["origin"] == [leg["from"]["map_query"]]
+        assert params["destination"] == [leg["to"]["map_query"]]
+        assert params["travelmode"] == [mode]
 
 
 def test_standalone_export_includes_each_city_live_clock_fx_phrases_and_legs() -> None:
@@ -175,7 +269,7 @@ def test_standalone_export_includes_each_city_live_clock_fx_phrases_and_legs() -
     assert 'body:after{z-index:1;pointer-events:none}' in export
     assert 'main{position:relative;z-index:2}' in export
     assert 'body:after{background:rgba(5,8,5,.8)}' in export
-    assert 'h1{max-width:13ch;overflow-wrap:normal;word-break:keep-all}' in export
+    assert 'h1{max-width:13ch;overflow-wrap:anywhere;word-break:keep-all}' in export
     assert 'background:var(--control-bg);color:var(--control-text)' in export
     assert 'data-active-city-summary' in export
     assert 'summary.textContent = citySummary.textContent' in export

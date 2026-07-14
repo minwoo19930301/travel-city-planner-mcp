@@ -34,6 +34,15 @@ function base64UrlBytes(value) {
   return Uint8Array.from(binary, (char) => char.charCodeAt(0));
 }
 
+function hasValidPlanIdentity(plan) {
+  return (
+    typeof plan?.plan_id === "string"
+    && Boolean(plan.plan_id.trim())
+    && Number.isInteger(plan.revision)
+    && plan.revision > 0
+  );
+}
+
 async function decodeContentToken(token) {
   if (!token.startsWith("tp1.")) throw new Error("tp1. 형식의 content token이 아닙니다.");
   if (token.length > MAX_TOKEN_CHARS) throw new Error("content token이 허용 크기를 초과했습니다.");
@@ -63,16 +72,30 @@ async function decodeContentToken(token) {
   });
   const text = new TextDecoder().decode(decoded);
   const plan = JSON.parse(text);
-  if (plan.schema_version !== 1 || !Array.isArray(plan.days)) {
+  if (
+    !plan || plan.schema_version !== 1 || !hasValidPlanIdentity(plan)
+    || !Array.isArray(plan.segments) || !plan.segments.length
+    || !Array.isArray(plan.days) || !plan.days.length
+    || !plan.segments.every((segment) => segment && typeof segment.destination_id === "string")
+    || !plan.days.every((day) => day && Array.isArray(day.activities))
+  ) {
     throw new Error("지원하지 않는 plan schema입니다.");
   }
   return plan;
 }
 
-function safeHttpUrl(value) {
+function safeGoogleMapsUrl(value) {
   try {
     const parsed = new URL(String(value));
-    if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password) return "";
+    if (
+      parsed.protocol !== "https:"
+      || parsed.hostname !== "www.google.com"
+      || parsed.port
+      || /^https:\/\/www\.google\.com:443(?:[/?#]|$)/i.test(String(value).trim())
+      || parsed.username
+      || parsed.password
+      || !parsed.pathname.startsWith("/maps/")
+    ) return "";
     return parsed.href;
   } catch {
     return "";
@@ -90,6 +113,20 @@ function destinationFor(id) {
   return destination;
 }
 
+function validatePlanForViewer(plan) {
+  const knownDestination = (id) => typeof id === "string" && Boolean(catalog?.destinations?.[id]);
+  if (
+    !plan || !hasValidPlanIdentity(plan)
+    || !Array.isArray(plan.segments) || !plan.segments.length
+    || !plan.segments.every((segment) => knownDestination(segment?.destination_id))
+    || !Array.isArray(plan.days) || !plan.days.length
+    || !plan.days.every((day) => Array.isArray(day?.activities) && day.activities.every((activity) => (
+      activity && knownDestination(activity.destination_id)
+      && ["time", "title", "location"].every((key) => typeof activity[key] === "string")
+    )))
+  ) throw new Error("content token의 도시 또는 일정 구조가 올바르지 않습니다.");
+}
+
 function uniqueDestinationIds(plan) {
   return [...new Set(plan.segments.map((segment) => segment.destination_id))];
 }
@@ -102,6 +139,24 @@ function directionsUrl(origin, destination, travelmode = "transit") {
 function mapsSearchUrl(query) {
   const params = new URLSearchParams({ api: "1", query });
   return `https://www.google.com/maps/search/?${params}`;
+}
+
+function dayRouteUrl(activities) {
+  const queries = (activities || []).map(routeQuery).filter(Boolean);
+  if (!queries.length) return "";
+  if (queries.length === 1) return mapsSearchUrl(queries[0]);
+  const params = new URLSearchParams({
+    api: "1",
+    origin: queries[0],
+    destination: queries.at(-1),
+    travelmode: "transit",
+  });
+  if (queries.length > 2) params.set("waypoints", queries.slice(1, -1).join("|"));
+  return `https://www.google.com/maps/dir/?${params}`;
+}
+
+function activityMapUrl(activity) {
+  return safeGoogleMapsUrl(activity?.map_url) || mapsSearchUrl(routeQuery(activity));
 }
 
 function routeQuery(activity) {
@@ -270,12 +325,15 @@ function setExchangeRate(panel, destination, rate, meta = {}) {
   const rateText = panel.querySelector("[data-rate-text]");
   const metaText = panel.querySelector("[data-rate-meta]");
   if (!Number.isFinite(numericRate) || numericRate <= 0) {
+    panel.dataset.exchangeState = meta.state || "unavailable";
+    delete panel.dataset.rate;
     rateText.textContent = "환율 조회 불가";
-    metaText.textContent = meta.message || "마지막 정상값도 없습니다.";
+    metaText.textContent = meta.message || "정상 snapshot이 없어 계산기를 사용할 수 없습니다.";
     localInput.disabled = true;
     krwInput.disabled = true;
     return;
   }
+  panel.dataset.exchangeState = meta.state || "snapshot";
   panel.dataset.rate = String(numericRate);
   localInput.disabled = false;
   krwInput.disabled = false;
@@ -292,6 +350,8 @@ function renderExchangePanel(plan, destination) {
   rateText.dataset.rateText = "";
   const metaText = element("p", "rate-meta", "저장된 조회값을 확인합니다.");
   metaText.dataset.rateMeta = "";
+  metaText.setAttribute("role", "status");
+  metaText.setAttribute("aria-live", "polite");
   const fields = element("div", "exchange-fields");
   const localLabel = document.createElement("label");
   localLabel.append(element("span", "", destination.currency.code));
@@ -361,21 +421,43 @@ function renderPhrasePanel(destination) {
 async function refreshCityGuide(destinationId, panel) {
   guideRequest?.abort();
   guideRequest = new AbortController();
+  const destination = destinationFor(destinationId);
+  const setFailure = (state, detail) => {
+    const hasSnapshot = Number(panel.dataset.rate) > 0;
+    panel.dataset.exchangeState = state;
+    const meta = panel.querySelector("[data-rate-meta]");
+    if (hasSnapshot) {
+      if (meta) meta.textContent = `${detail} 마지막 정상 snapshot을 유지합니다.`;
+      return;
+    }
+    setExchangeRate(panel, destination, undefined, {
+      state,
+      message: `${detail} 정상 snapshot이 없어 계산기를 비활성화했습니다.`,
+    });
+  };
+  if (!navigator.onLine) {
+    setFailure("offline", "오프라인입니다.");
+    return;
+  }
+  panel.dataset.exchangeState = "loading";
+  const meta = panel.querySelector("[data-rate-meta]");
+  if (meta) meta.textContent = "환율을 갱신하는 중입니다…";
   try {
     const response = await fetch(`/api/city-guide/${encodeURIComponent(destinationId)}`, { cache: "no-store", signal: guideRequest.signal });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const payload = await response.json();
     if (!payload.ok) throw new Error(payload.message || "city guide unavailable");
-    const destination = destinationFor(destinationId);
     const exchange = payload.exchange || {};
     const rate = Number.isFinite(exchange.krw_per_unit)
       ? exchange
       : (exchange.rates || []).find((item) => item.currency === destination.currency.code);
-    if (destinationId === activeDestinationId) setExchangeRate(panel, destination, rate?.krw_per_unit, rate || exchange);
+    if (!Number.isFinite(rate?.krw_per_unit)) throw new Error(exchange.message || "환율 값이 없습니다.");
+    if (destinationId === activeDestinationId) {
+      setExchangeRate(panel, destination, rate.krw_per_unit, { ...rate, state: "live" });
+    }
   } catch (error) {
     if (error.name === "AbortError") return;
-    const meta = panel.querySelector("[data-rate-meta]");
-    if (meta) meta.textContent = `자동 새로고침 실패 · 저장된 값 유지 (${error.message})`;
+    setFailure(navigator.onLine ? "error" : "offline", `${navigator.onLine ? "환율 갱신에 실패했습니다." : "오프라인입니다."} (${error.message})`);
   }
 }
 
@@ -445,7 +527,7 @@ function showMapPreview(activity, shouldScroll = true) {
   if (desk) desk.dataset.destinationId = activity.destination_id || activeDestinationId;
   title.textContent = activity.title;
   locationText.textContent = activity.location || routeQuery(activity);
-  const url = safeHttpUrl(activity.map_url);
+  const url = activityMapUrl(activity);
   if (url) {
     open.href = url;
     open.removeAttribute("aria-disabled");
@@ -473,7 +555,7 @@ function renderMapDesk(plan) {
   open.dataset.mapOpen = "";
   open.target = "_blank";
   open.rel = "noreferrer";
-  const firstUrl = safeHttpUrl(first?.map_url);
+  const firstUrl = activityMapUrl(first);
   if (firstUrl) {
     open.href = firstUrl;
   } else {
@@ -497,7 +579,7 @@ function renderActivity(activity) {
   const preview = element("button", "map-preview", "VIEW");
   preview.type = "button";
   preview.addEventListener("click", () => showMapPreview(activity));
-  const mapUrl = safeHttpUrl(activity.map_url);
+  const mapUrl = activityMapUrl(activity);
   const map = element(mapUrl ? "a" : "span", "map-link", mapUrl ? "MAP" : "NO MAP");
   if (mapUrl) {
     map.href = mapUrl;
@@ -524,7 +606,7 @@ function renderLeg(fromActivity, toActivity, leg = {}) {
     ["DRIVE", leg.driving_url || leg.route_urls?.driving || leg.routes?.driving || directionsUrl(from, to, "driving")],
   ];
   options.forEach(([name, rawUrl]) => {
-    const url = safeHttpUrl(rawUrl);
+    const url = safeGoogleMapsUrl(rawUrl) || directionsUrl(from, to, name === "WALK" ? "walking" : name === "DRIVE" ? "driving" : "transit");
     const link = element(url ? "a" : "span", "", name);
     if (url) {
       link.href = url;
@@ -553,7 +635,7 @@ function renderItinerary(plan) {
       const next = day.activities[index + 1];
       if (next) stops.append(renderLeg(activity, next, (day.legs || day.route_legs || [])[index]));
     });
-    const routeUrl = safeHttpUrl(day.route_map_url);
+    const routeUrl = safeGoogleMapsUrl(day.route_map_url) || dayRouteUrl(day.activities);
     const route = element(routeUrl ? "a" : "span", "route-link", routeUrl ? "OPEN DAY ROUTE" : "ROUTE UNAVAILABLE");
     if (routeUrl) {
       route.href = routeUrl;
@@ -576,6 +658,7 @@ function renderPlan(plan, { demo = false } = {}) {
   cityButtons = [];
   guideContent = undefined;
   activeDestinationId = "";
+  validatePlanForViewer(plan);
   currentPlan = plan;
   const firstDestination = destinationFor(plan.segments[0].destination_id);
   setTheme(firstDestination);
@@ -597,6 +680,11 @@ async function bootstrap() {
     const response = await fetch("/data/destinations.json");
     if (!response.ok) throw new Error("canonical catalog를 불러오지 못했습니다.");
     catalog = await response.json();
+    if (
+      catalog?.destinationCount !== 69
+      || !catalog.destinations
+      || Object.keys(catalog.destinations).length !== 69
+    ) throw new Error("69개 canonical catalog를 확인할 수 없습니다.");
     const token = planTokenFromLocation();
     if (token) {
       tokenInput.value = token;
@@ -638,6 +726,27 @@ tokenForm.addEventListener("submit", async (event) => {
   } catch (error) {
     tokenError.textContent = error.message;
   }
+});
+
+window.addEventListener("offline", () => {
+  const panel = document.querySelector(".exchange-panel");
+  if (!panel) return;
+  const destination = activeDestinationId && destinationFor(activeDestinationId);
+  if (!destination) return;
+  if (Number(panel.dataset.rate) > 0) {
+    panel.dataset.exchangeState = "offline";
+    panel.querySelector("[data-rate-meta]").textContent = "오프라인입니다. 마지막 정상 snapshot을 유지합니다.";
+  } else {
+    setExchangeRate(panel, destination, undefined, {
+      state: "offline",
+      message: "오프라인이며 정상 snapshot이 없어 계산기를 사용할 수 없습니다.",
+    });
+  }
+});
+
+window.addEventListener("online", () => {
+  const panel = document.querySelector(".exchange-panel");
+  if (panel && activeDestinationId) refreshCityGuide(activeDestinationId, panel);
 });
 
 window.addEventListener("hashchange", bootstrap);

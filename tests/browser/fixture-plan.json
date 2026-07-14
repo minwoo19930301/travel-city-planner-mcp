@@ -1,0 +1,150 @@
+{
+  "schema_version": 1,
+  "plan_id": "browser-gate",
+  "revision": 1,
+  "created_at": "2026-07-14T00:00:00Z",
+  "updated_at": "2026-07-14T00:00:00Z",
+  "title": "파리 · 빈 4박 5일",
+  "source_query": "Relay10 browser regression fixture",
+  "duration": {
+    "selected_nights": 4,
+    "selected_days": 5,
+    "requested_range": [4, 4]
+  },
+  "pace": "balanced",
+  "preferences": ["미술", "카페", "건축"],
+  "segments": [
+    {
+      "id": "segment-paris",
+      "destination_id": "paris",
+      "city": "Paris",
+      "city_ko": "파리",
+      "country_ko": "프랑스",
+      "nights": 2,
+      "days": 3,
+      "day_start": 1,
+      "day_end": 3,
+      "start_date": null,
+      "end_date": null,
+      "currency": "EUR",
+      "time_zone": "Europe/Paris"
+    },
+    {
+      "id": "segment-austria",
+      "destination_id": "austria",
+      "city": "Vienna",
+      "city_ko": "빈",
+      "country_ko": "오스트리아",
+      "nights": 2,
+      "days": 2,
+      "day_start": 4,
+      "day_end": 5,
+      "start_date": null,
+      "end_date": null,
+      "currency": "EUR",
+      "time_zone": "Europe/Vienna"
+    }
+  ],
+  "days": [
+    {
+      "day": 1,
+      "date": null,
+      "title": "파리의 미술과 강변",
+      "destination_ids": ["paris"],
+      "activities": [
+        {
+          "id": "paris-1",
+          "destination_id": "paris",
+          "time": "10:00",
+          "title": "루브르 박물관",
+          "location": "Louvre Museum",
+          "map_query": "Louvre Museum, Paris",
+          "map_url": "https://www.google.com/maps/search/?api=1&query=Louvre+Museum%2C+Paris",
+          "icon": "landmark",
+          "memo": "",
+          "source": "browser-fixture",
+          "template_day": 0
+        },
+        {
+          "id": "paris-2",
+          "destination_id": "paris",
+          "time": "16:00",
+          "title": "에펠탑",
+          "location": "Eiffel Tower",
+          "map_query": "Eiffel Tower, Paris",
+          "map_url": "https://www.google.com/maps/search/?api=1&query=Eiffel+Tower%2C+Paris",
+          "icon": "building",
+          "memo": "",
+          "source": "browser-fixture",
+          "template_day": 0
+        }
+      ],
+      "route_summary": "루브르 박물관 → 에펠탑",
+      "route_map_url": "https://www.google.com/maps/dir/?api=1&origin=Louvre+Museum%2C+Paris&destination=Eiffel+Tower%2C+Paris&travelmode=transit",
+      "legs": []
+    },
+    {
+      "day": 4,
+      "date": null,
+      "title": "빈의 궁전과 음악",
+      "destination_ids": ["austria"],
+      "activities": [
+        {
+          "id": "vienna-1",
+          "destination_id": "austria",
+          "time": "09:30",
+          "title": "쇤브룬 궁전",
+          "location": "Schönbrunn Palace",
+          "map_query": "Schönbrunn Palace, Vienna",
+          "map_url": "https://www.google.com/maps/search/?api=1&query=Sch%C3%B6nbrunn+Palace%2C+Vienna",
+          "icon": "landmark",
+          "memo": "",
+          "source": "browser-fixture",
+          "template_day": 0
+        },
+        {
+          "id": "vienna-2",
+          "destination_id": "austria",
+          "time": "19:30",
+          "title": "빈 국립 오페라 극장",
+          "location": "Vienna State Opera",
+          "map_query": "Vienna State Opera, Vienna",
+          "map_url": "https://www.google.com/maps/search/?api=1&query=Vienna+State+Opera%2C+Vienna",
+          "icon": "music",
+          "memo": "",
+          "source": "browser-fixture",
+          "template_day": 0
+        }
+      ],
+      "route_summary": "쇤브룬 궁전 → 빈 국립 오페라 극장",
+      "route_map_url": "https://www.google.com/maps/dir/?api=1&origin=Sch%C3%B6nbrunn+Palace%2C+Vienna&destination=Vienna+State+Opera%2C+Vienna&travelmode=transit",
+      "legs": []
+    }
+  ],
+  "live_data": {
+    "weather": {
+      "status": "skipped",
+      "message": "브라우저 회귀 테스트에서는 외부 날씨 API를 호출하지 않습니다."
+    },
+    "exchange": {
+      "status": "live",
+      "source": "local-browser-fixture",
+      "fetched_at": "2026-07-14T00:00:00Z",
+      "updated_at": "2026-07-14T00:00:00Z",
+      "rates": [
+        {
+          "currency": "EUR",
+          "krw_per_unit": 1600,
+          "status": "live",
+          "source": "local-browser-fixture",
+          "fetched_at": "2026-07-14T00:00:00Z",
+          "updated_at": "2026-07-14T00:00:00Z"
+        }
+      ]
+    }
+  },
+  "catalog": {
+    "digest": "browser-fixture",
+    "destination_count": 69
+  }
+}

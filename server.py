@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -345,6 +346,12 @@ def _error_payload(exc: Exception) -> dict[str, Any]:
     return {"ok": False, "error": exc.__class__.__name__, "message": str(exc)}
 
 
+def _export_filename(plan_id: Any) -> str:
+    """Derive a portable basename without changing the plan identity itself."""
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "-", str(plan_id or "")).strip(".-")
+    return f"{safe or 'travel-plan'}.html"
+
+
 def _with_optional_html(
     payload: dict[str, Any],
     plan: dict[str, Any],
@@ -613,7 +620,7 @@ def export_plan(content_token: str, format: str = "html") -> ExportOutput:
             return ExportOutput(
                 ok=True,
                 format="html",
-                filename=f"{plan['plan_id']}.html",
+                filename=_export_filename(plan["plan_id"]),
                 html=render_export_html(plan, service.catalog),
             )
         if export_format == "json":

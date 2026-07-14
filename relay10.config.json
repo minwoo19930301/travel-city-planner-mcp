@@ -33,6 +33,10 @@
       {
         "command": "${PYTHON:-python3}",
         "args": ["scripts/smoke_mcp.py"]
+      },
+      {
+        "command": "npm",
+        "args": ["run", "test:browser"]
       }
     ]
   },

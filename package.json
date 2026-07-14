@@ -1,0 +1,10 @@
+{
+  "name": "travel-city-planner-mcp-browser-tests",
+  "private": true,
+  "scripts": {
+    "test:browser": "playwright test --config=tests/browser/playwright.config.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.1"
+  }
+}

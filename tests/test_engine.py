@@ -79,6 +79,48 @@ def test_multicity_plan_merges_transfer_day() -> None:
     assert any("이동" in item["title"] for item in transfer_days[0]["activities"])
 
 
+def test_paris_vienna_boundary_has_one_ordered_city_transition() -> None:
+    service = PlannerService()
+    plan = run(
+        service.create_plan(
+            [
+                {"destination_id": "paris", "nights": 2},
+                {"destination_id": "austria", "nights": 2},
+            ],
+            start_date="2026-10-01",
+            pace="relaxed",
+            include_live_data=False,
+        )
+    )
+
+    assert plan["segments"][0]["day_end"] == plan["segments"][1]["day_start"] == 3
+    boundary = plan["days"][2]
+    assert boundary["destination_ids"] == ["paris", "austria"]
+    assert len(boundary["activities"]) == 3
+    origin, transfer, destination = boundary["activities"]
+    assert origin["destination_id"] == "paris"
+    assert origin["time"] < "12:00"
+    assert transfer["destination_id"] == "austria"
+    assert transfer["source"] == "generated-transfer"
+    assert destination["destination_id"] == "austria"
+    assert destination["time"] >= "17:00"
+    assert sum(
+        activity["source"] == "generated-transfer"
+        for activity in boundary["activities"]
+    ) == 1
+    times = [activity["time"] for activity in boundary["activities"]]
+    assert times == sorted(times)
+    city_transitions = sum(
+        left["destination_id"] != right["destination_id"]
+        for left, right in zip(boundary["activities"], boundary["activities"][1:])
+    )
+    assert city_transitions == 1
+    assert len(boundary["legs"]) == 2
+    for index, leg in enumerate(boundary["legs"]):
+        assert leg["from"]["activity_id"] == boundary["activities"][index]["id"]
+        assert leg["to"]["activity_id"] == boundary["activities"][index + 1]["id"]
+
+
 def test_undated_weather_never_substitutes_current_conditions() -> None:
     service = PlannerService()
     provider = LiveDataProvider()

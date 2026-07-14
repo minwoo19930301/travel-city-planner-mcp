@@ -14,6 +14,7 @@ import sys
 import tempfile
 import time
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
 import httpx
 from mcp import ClientSession, types
@@ -31,6 +32,13 @@ EXPECTED_TOOLS = {
     "export_plan",
     "validate_plan",
 }
+
+ROUTE_MODES = ("transit", "walking", "driving")
+GMARKET_FONT_ASSETS = (
+    "GmarketSansLight.woff2",
+    "GmarketSansMedium.woff2",
+    "GmarketSansBold.woff2",
+)
 
 
 def choose_port() -> int:
@@ -63,6 +71,69 @@ def structured(result: types.CallToolResult) -> dict[str, Any]:
     return result.structuredContent
 
 
+def assert_directions_url(
+    value: str,
+    *,
+    origin: str,
+    destination: str,
+    travelmode: str,
+    waypoints: list[str] | None = None,
+) -> None:
+    """Verify an official Google directions URL without relying on string escaping."""
+
+    parsed = urlsplit(value)
+    assert parsed.scheme == "https", value
+    assert parsed.netloc == "www.google.com", value
+    assert parsed.path == "/maps/dir/", value
+    expected_query = {
+        "api": ["1"],
+        "origin": [origin],
+        "destination": [destination],
+        "travelmode": [travelmode],
+    }
+    if waypoints:
+        expected_query["waypoints"] = ["|".join(waypoints)]
+    assert parse_qs(parsed.query, keep_blank_values=True) == expected_query, value
+
+
+def assert_plan_routes(plan: dict[str, Any]) -> None:
+    """Check every adjacent activity and all three route modes in a plan response."""
+
+    checked_legs = 0
+    for day in plan["itinerary"]:
+        activities = day["activities"]
+        legs = day["legs"]
+        assert len(legs) == max(0, len(activities) - 1)
+
+        if len(activities) > 1:
+            map_queries = [activity["map_query"] for activity in activities]
+            assert_directions_url(
+                day["route_map_url"],
+                origin=map_queries[0],
+                destination=map_queries[-1],
+                travelmode="transit",
+                waypoints=map_queries[1:-1],
+            )
+
+        for index, leg in enumerate(legs):
+            origin = activities[index]
+            destination = activities[index + 1]
+            assert leg["from"]["activity_id"] == origin["activity_id"]
+            assert leg["from"]["map_query"] == origin["map_query"]
+            assert leg["to"]["activity_id"] == destination["activity_id"]
+            assert leg["to"]["map_query"] == destination["map_query"]
+            assert set(leg["route_urls"]) == set(ROUTE_MODES)
+            for mode in ROUTE_MODES:
+                assert_directions_url(
+                    leg["route_urls"][mode],
+                    origin=origin["map_query"],
+                    destination=destination["map_query"],
+                    travelmode=mode,
+                )
+            checked_legs += 1
+    assert checked_legs > 0, "plan smoke did not exercise any route leg"
+
+
 async def exercise_server(base_url: str) -> None:
     health = await wait_for_health(base_url, timeout=15.0)
     assert health["service"] == "travelCityPlanner"
@@ -92,6 +163,19 @@ async def exercise_server(base_url: str) -> None:
                 assert tool.annotations.openWorldHint is not None
                 schema_text = json.dumps(tool.outputSchema or {}, sort_keys=True)
                 assert '"ok"' in schema_text, f"{name} outputSchema is not a concrete object contract"
+
+            full_catalog = structured(
+                await session.call_tool("list_destinations", {"limit": 100})
+            )
+            assert full_catalog["ok"] is True
+            assert full_catalog["count"] == 69
+            assert full_catalog["catalog_total"] == 69
+            catalog_ids = [item["id"] for item in full_catalog["destinations"]]
+            assert len(catalog_ids) == len(set(catalog_ids)) == 69
+            catalog_by_id = {
+                item["id"]: item for item in full_catalog["destinations"]
+            }
+            assert {"tokyo", "taipei"} <= set(catalog_by_id)
 
             destinations = structured(
                 await session.call_tool("list_destinations", {"search": "도쿄", "limit": 5})
@@ -132,7 +216,14 @@ async def exercise_server(base_url: str) -> None:
             assert route_options["from"] == "도쿄역"
             assert route_options["to"] == "센소지"
             assert route_options["suggested_mode"] == "walking"
-            assert set(route_options["route_urls"]) == {"transit", "walking", "driving"}
+            assert set(route_options["route_urls"]) == set(ROUTE_MODES)
+            for mode in ROUTE_MODES:
+                assert_directions_url(
+                    route_options["route_urls"][mode],
+                    origin="도쿄역",
+                    destination="센소지",
+                    travelmode=mode,
+                )
 
             planned = structured(
                 await session.call_tool(
@@ -153,6 +244,7 @@ async def exercise_server(base_url: str) -> None:
             assert first_day["activities"][0]["activity_id"].startswith("act-")
             assert first_day["activities"][0]["destination_id"] == "tokyo"
             assert first_day["activities"][0]["location"]
+            assert_plan_routes(planned)
             assert "html" not in planned or planned["html"] is None
             assert planned["content_token"].startswith("tp1.")
             assert planned["viewer_url"].startswith(f"{base_url}/viewer#plan=tp1.")
@@ -224,6 +316,87 @@ async def exercise_server(base_url: str) -> None:
             assert legacy["payload"]["v"] == 3
             assert legacy["share_url"].startswith("https://")
 
+            multi_created = structured(
+                await session.call_tool(
+                    "create_plan",
+                    {
+                        "segments_json": json.dumps(
+                            [
+                                {"destination_id": "tokyo", "nights": 2},
+                                {"destination_id": "taipei", "nights": 2},
+                            ]
+                        ),
+                        "preferences": "시장, 야경, 로컬 음식",
+                        "pace": "balanced",
+                        "include_live_data": False,
+                    },
+                )
+            )
+            assert multi_created["ok"] is True
+            assert multi_created["revision"] == 1
+            assert multi_created["title"] == "도쿄 · 타이베이 4박 5일"
+            assert multi_created["duration"]["selected_nights"] == 4
+            assert multi_created["duration"]["selected_days"] == 5
+            assert [
+                segment["destination_id"] for segment in multi_created["segments"]
+            ] == ["tokyo", "taipei"]
+            assert len(multi_created["itinerary"]) == 5
+            itinerary_destination_ids = {
+                destination_id
+                for day in multi_created["itinerary"]
+                for destination_id in day["destinations"]
+            }
+            assert itinerary_destination_ids == {
+                "tokyo",
+                "taipei",
+            }
+            assert_plan_routes(multi_created)
+            multi_token = multi_created["content_token"]
+            assert multi_token.startswith("tp1.")
+
+            multi_reopened = structured(
+                await session.call_tool(
+                    "get_plan",
+                    {"content_token": multi_token, "include_itinerary": True},
+                )
+            )
+            assert multi_reopened["ok"] is True
+            assert multi_reopened["plan_id"] == multi_created["plan_id"]
+            assert multi_reopened["revision"] == multi_created["revision"]
+            assert multi_reopened["content_token"] == multi_token
+            assert [
+                segment["destination_id"] for segment in multi_reopened["segments"]
+            ] == ["tokyo", "taipei"]
+            assert_plan_routes(multi_reopened)
+
+            multi_validation = structured(
+                await session.call_tool(
+                    "validate_plan", {"content_token": multi_token}
+                )
+            )
+            assert multi_validation["ok"] is True
+            assert multi_validation["plan_id"] == multi_created["plan_id"]
+            assert multi_validation["revision"] == 1
+            assert multi_validation["days"] == 5
+            assert multi_validation["segments"] == 2
+            assert multi_validation["catalog_digest"] == full_catalog["catalog_digest"]
+            assert multi_validation["token_survives_restart"] is True
+
+            multi_html_export = structured(
+                await session.call_tool(
+                    "export_plan", {"content_token": multi_token, "format": "html"}
+                )
+            )
+            assert multi_html_export["ok"] is True
+            assert multi_html_export["filename"].endswith(".html")
+            multi_html = multi_html_export["html"]
+            assert "<!doctype html>" in multi_html.lower()
+            assert 'data-city-id="tokyo"' in multi_html
+            assert 'data-city-id="taipei"' in multi_html
+            assert "Gmarket" in multi_html
+            assert "data:font/woff2;base64," in multi_html
+            assert "data:image/jpeg;base64," in multi_html
+
             async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
                 viewer = await client.get(f"{base_url}/viewer")
                 viewer.raise_for_status()
@@ -231,7 +404,26 @@ async def exercise_server(base_url: str) -> None:
 
                 catalog = await client.get(f"{base_url}/data/destinations.json")
                 catalog.raise_for_status()
-                assert catalog.json()["destinationCount"] == 69
+                catalog_payload = catalog.json()
+                assert catalog_payload["destinationCount"] == 69
+                assert len(catalog_payload["destinations"]) == 69
+                assert set(catalog_payload["destinations"]) == set(catalog_ids)
+
+                for font_name in GMARKET_FONT_ASSETS:
+                    font = await client.get(
+                        f"{base_url}/viewer/assets/fonts/{font_name}"
+                    )
+                    font.raise_for_status()
+                    assert font.status_code == 200
+                    assert font.content.startswith(b"wOF2"), font_name
+
+                for destination_id in ("tokyo", "taipei"):
+                    hero_url = catalog_by_id[destination_id]["hero_url"]
+                    hero = await client.get(hero_url)
+                    hero.raise_for_status()
+                    assert hero.status_code == 200
+                    assert hero.headers["content-type"].startswith("image/jpeg")
+                    assert hero.content.startswith(b"\xff\xd8\xff"), destination_id
 
                 city_guide = await client.get(
                     f"{base_url}/api/city-guide/tokyo",
