@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import httpx
@@ -113,27 +113,70 @@ class LiveDataProvider:
             currency = catalog.get(segment["destination_id"])["currency"]["code"]
             if currency not in currencies:
                 currencies.append(currency)
-        rates = []
-        for currency in currencies:
-            if currency == "KRW":
-                rates.append({"currency": "KRW", "krw_per_unit": 1, "status": "fixed"})
-                continue
-            try:
-                response = await client.get(f"https://open.er-api.com/v6/latest/{currency}")
-                response.raise_for_status()
-                krw = response.json().get("rates", {}).get("KRW")
-                if not krw:
-                    raise ValueError(f"KRW rate missing for {currency}")
-                rates.append(
-                    {
-                        "currency": currency,
-                        "krw_per_unit": round(float(krw), 4),
-                        "status": "live",
-                    }
-                )
-            except Exception as exc:  # noqa: BLE001
-                rates.append(
-                    {"currency": currency, "status": "unavailable", "message": str(exc)}
-                )
+        fetched_at = _iso_now()
+        rates = [await self._exchange_rate(currency, client) for currency in currencies]
         status = "live" if any(item["status"] in {"live", "fixed"} for item in rates) else "unavailable"
-        return {"status": status, "base": "KRW", "rates": rates}
+        updated_values = [item.get("updated_at") for item in rates if item.get("updated_at")]
+        return {
+            "status": status,
+            "base": "KRW",
+            "rates": rates,
+            "fetched_at": fetched_at,
+            "source": "open.er-api.com / KRW identity",
+            "updated_at": updated_values[0] if len(set(updated_values)) == 1 else None,
+        }
+
+    async def exchange_for_currency(self, currency: str) -> dict[str, Any]:
+        """Fetch one currency's KRW value with a bounded timeout and safe fallback."""
+        code = str(currency or "").strip().upper()
+        if not code or len(code) != 3 or not code.isalpha():
+            raise ValueError("currency must be a three-letter ISO code")
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            return await self._exchange_rate(code, client)
+
+    async def _exchange_rate(
+        self,
+        currency: str,
+        client: httpx.AsyncClient,
+    ) -> dict[str, Any]:
+        fetched_at = _iso_now()
+        if currency == "KRW":
+            return {
+                "status": "fixed",
+                "currency": "KRW",
+                "krw_per_unit": 1.0,
+                "fetched_at": fetched_at,
+                "source": "KRW identity",
+                "updated_at": fetched_at,
+            }
+
+        source = f"https://open.er-api.com/v6/latest/{currency}"
+        try:
+            response = await client.get(source)
+            response.raise_for_status()
+            payload = response.json()
+            krw = payload.get("rates", {}).get("KRW")
+            if not krw:
+                raise ValueError(f"KRW rate missing for {currency}")
+            return {
+                "status": "live",
+                "currency": currency,
+                "krw_per_unit": round(float(krw), 4),
+                "fetched_at": fetched_at,
+                "source": source,
+                "updated_at": payload.get("time_last_update_utc"),
+            }
+        except Exception as exc:  # noqa: BLE001
+            return {
+                "status": "unavailable",
+                "currency": currency,
+                "krw_per_unit": None,
+                "fetched_at": fetched_at,
+                "source": source,
+                "updated_at": None,
+                "message": str(exc),
+            }
+
+
+def _iso_now() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()

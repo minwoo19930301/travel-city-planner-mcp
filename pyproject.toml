@@ -7,6 +7,7 @@ dependencies = [
   "mcp==1.28.1",
   "httpx==0.28.1",
   "uvicorn==0.51.0",
+  "tzdata==2026.3",
 ]
 
 [tool.pytest.ini_options]

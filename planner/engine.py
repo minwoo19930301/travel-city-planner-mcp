@@ -7,8 +7,9 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import urlencode, urlsplit
+from zoneinfo import ZoneInfo
 
-from .catalog import Catalog, CatalogError
+from .catalog import Catalog, CatalogError, normalize_text
 from .icons import normalize_icon
 from .live_data import LiveDataProvider
 from .tokens import TokenError, decode_content_token, encode_content_token
@@ -126,6 +127,29 @@ def _route_url(activities: list[dict[str, Any]]) -> str:
     return "https://www.google.com/maps/dir/?" + urlencode(params)
 
 
+TRAVEL_MODES = ("transit", "walking", "driving")
+
+
+def _directions_url(origin: str, destination: str, travelmode: str) -> str:
+    if travelmode not in TRAVEL_MODES:
+        raise PlannerError(f"unsupported travel mode: {travelmode}")
+    return "https://www.google.com/maps/dir/?" + urlencode(
+        {
+            "api": 1,
+            "origin": origin,
+            "destination": destination,
+            "travelmode": travelmode,
+        }
+    )
+
+
+def _route_options(origin: str, destination: str) -> dict[str, str]:
+    return {
+        mode: _directions_url(origin, destination, mode)
+        for mode in TRAVEL_MODES
+    }
+
+
 def _validate_web_url(value: Any, field_name: str) -> None:
     """Reject executable or credential-bearing links recovered from untrusted tokens."""
     if value in {None, ""}:
@@ -138,6 +162,17 @@ def _validate_web_url(value: Any, field_name: str) -> None:
         raise TokenError(f"{field_name} must be an absolute http(s) URL")
     if parsed.username or parsed.password:
         raise TokenError(f"{field_name} must not contain credentials")
+
+
+def _validate_google_maps_url(value: Any, field_name: str) -> None:
+    _validate_web_url(value, field_name)
+    if value in {None, ""}:
+        return
+    parsed = urlsplit(str(value).strip())
+    if parsed.scheme != "https" or parsed.hostname != "www.google.com":
+        raise TokenError(f"{field_name} must use the official Google Maps host")
+    if not parsed.path.startswith("/maps/"):
+        raise TokenError(f"{field_name} must be a Google Maps URL")
 
 
 class PlannerService:
@@ -304,12 +339,7 @@ class PlannerService:
             global_offset += nights
 
         days = [day_map[index] for index in sorted(day_map)]
-        for plan_day in days:
-            plan_day["activities"].sort(key=lambda activity: activity["time"])
-            plan_day["route_summary"] = " → ".join(
-                activity["title"] for activity in plan_day["activities"]
-            )
-            plan_day["route_map_url"] = _route_url(plan_day["activities"])
+        self._rebuild_routes({"days": days})
 
         total_nights = sum(segment["nights"] for segment in normalized_segments)
         total_days = total_nights + 1
@@ -346,6 +376,97 @@ class PlannerService:
         )
         self._head_revisions[plan_id] = 1
         return plan
+
+    async def city_guide(
+        self,
+        destination_id: str,
+        phrase_query: str = "",
+    ) -> dict[str, Any]:
+        """Return canonical city media/language data plus fresh clocks and FX."""
+        destination = self.catalog.get(destination_id)
+        if len(phrase_query) > 200:
+            raise PlannerError("phrase_query must be at most 200 characters")
+        query = normalize_text(phrase_query)
+        phrases = []
+        for phrase in destination.get("phrases", []):
+            haystack = normalize_text(
+                " ".join(
+                    str(phrase.get(key, ""))
+                    for key in ("text", "pron", "meaning")
+                )
+            )
+            if query and query not in haystack:
+                continue
+            phrases.append(
+                {
+                    "text": str(phrase.get("text", "")),
+                    "pron": str(phrase.get("pron", "")),
+                    "meaning": str(phrase.get("meaning", "")),
+                }
+            )
+
+        now_utc = datetime.now(timezone.utc).replace(microsecond=0)
+        currency = copy.deepcopy(destination["currency"])
+        exchange = await self.live_data.exchange_for_currency(currency["code"])
+        return {
+            "ok": True,
+            "destination": {
+                "id": destination["id"],
+                "city": destination["city"],
+                "city_ko": destination["cityKo"],
+                "country_ko": destination["countryKo"],
+                "hero_image": destination["heroImage"],
+                "hero_url": f"{self.public_base_url}/viewer/{destination['heroImage']}",
+                "time_zone": destination["timeZone"],
+                "currency": currency,
+            },
+            "clocks": {
+                "fetched_at": now_utc.isoformat(),
+                "seoul": self._clock_value("Asia/Seoul", now_utc),
+                "local": self._clock_value(destination["timeZone"], now_utc),
+            },
+            "language": destination.get("phraseLabel", ""),
+            "phrases": phrases,
+            "map_url": _map_search_url(
+                f"{destination['city']}, {destination['country']}"
+            ),
+            "exchange": exchange,
+        }
+
+    def route_options(
+        self,
+        from_place: str,
+        to_place: str,
+        suggested_mode: str = "transit",
+    ) -> dict[str, Any]:
+        """Build official Google Maps route URLs without claiming live ETAs."""
+        origin = str(from_place or "").strip()
+        destination = str(to_place or "").strip()
+        if not origin or not destination:
+            raise PlannerError("from_place and to_place are required")
+        if len(origin) > 500 or len(destination) > 500:
+            raise PlannerError("route place text must be at most 500 characters")
+        mode = str(suggested_mode or "transit").strip().lower()
+        if mode not in TRAVEL_MODES:
+            raise PlannerError("suggested_mode must be transit, walking, or driving")
+        return {
+            "ok": True,
+            "from": origin,
+            "to": destination,
+            "suggested_mode": mode,
+            "route_urls": _route_options(origin, destination),
+            "note": "실시간 소요시간·운행 여부는 Google Maps를 열어 확인하세요.",
+        }
+
+    @staticmethod
+    def _clock_value(zone_name: str, now_utc: datetime) -> dict[str, str]:
+        local = now_utc.astimezone(ZoneInfo(zone_name))
+        return {
+            "time_zone": zone_name,
+            "iso": local.isoformat(),
+            "date": local.date().isoformat(),
+            "time": local.strftime("%H:%M:%S"),
+        }
 
     def _build_city_days(
         self,
@@ -511,11 +632,17 @@ class PlannerService:
                     "title": day["title"],
                     "destinations": day["destination_ids"],
                     "route_map_url": day["route_map_url"],
+                    "legs": day["legs"],
                     "activities": [
                         {
+                            "activity_id": activity["id"],
+                            "destination_id": activity["destination_id"],
                             "time": activity["time"],
                             "title": activity["title"],
+                            "location": activity["location"],
+                            "map_query": activity["map_query"],
                             "map_url": activity["map_url"],
+                            "memo": activity.get("memo", ""),
                         }
                         for activity in day["activities"]
                     ],
@@ -536,8 +663,25 @@ class PlannerService:
 
     def decode(self, token: str) -> dict[str, Any]:
         plan = decode_content_token(token)
+        self._migrate_legacy_v1(plan)
         self._validate_plan(plan)
         return plan
+
+    def _migrate_legacy_v1(self, plan: dict[str, Any]) -> None:
+        """Add deterministic navigation legs to already-issued v1 tokens.
+
+        The schema version remains 1 because this is an additive field. Present
+        legs are never rewritten here, so malformed/tampered new tokens still fail
+        validation instead of being silently repaired.
+        """
+        for day in plan.get("days", []):
+            if "legs" not in day and isinstance(day.get("activities"), list):
+                day["legs"] = [
+                    self._build_leg(origin, destination)
+                    for origin, destination in zip(
+                        day["activities"], day["activities"][1:]
+                    )
+                ]
 
     def mutate(
         self,
@@ -664,6 +808,45 @@ class PlannerService:
             day["activities"].sort(key=lambda item: item["time"])
             day["route_summary"] = " → ".join(item["title"] for item in day["activities"])
             day["route_map_url"] = _route_url(day["activities"])
+            day["legs"] = [
+                self._build_leg(origin, destination)
+                for origin, destination in zip(
+                    day["activities"], day["activities"][1:]
+                )
+            ]
+
+    def _build_leg(
+        self,
+        origin: dict[str, Any],
+        destination: dict[str, Any],
+    ) -> dict[str, Any]:
+        origin_query = str(
+            origin.get("map_query") or origin.get("location") or origin.get("title")
+        )
+        destination_query = str(
+            destination.get("map_query")
+            or destination.get("location")
+            or destination.get("title")
+        )
+        # Catalog activities do not carry reliable coordinates/distances. Transit is
+        # the conservative default; clients still receive all three route choices.
+        suggested_mode = "transit"
+        return {
+            "from": {
+                "activity_id": origin["id"],
+                "title": origin["title"],
+                "location": origin["location"],
+                "map_query": origin_query,
+            },
+            "to": {
+                "activity_id": destination["id"],
+                "title": destination["title"],
+                "location": destination["location"],
+                "map_query": destination_query,
+            },
+            "suggested_mode": suggested_mode,
+            "route_urls": _route_options(origin_query, destination_query),
+        }
 
     def _validate_plan(self, plan: dict[str, Any]) -> None:
         if plan.get("schema_version") != 1:
@@ -673,11 +856,48 @@ class PlannerService:
         for segment in plan.get("segments", []):
             self.catalog.get(segment["destination_id"])
         for day in plan["days"]:
-            _validate_web_url(day.get("route_map_url"), "route_map_url")
-            for activity in day.get("activities", []):
+            _validate_google_maps_url(day.get("route_map_url"), "route_map_url")
+            activities = day.get("activities", [])
+            if day.get("route_map_url") != _route_url(activities):
+                raise TokenError("route_map_url does not match day activities")
+            for activity in activities:
                 if activity.get("icon") not in self.allowed_icons:
                     raise TokenError(f"invalid activity icon: {activity.get('icon')}")
-                _validate_web_url(activity.get("map_url"), "map_url")
+                _validate_google_maps_url(activity.get("map_url"), "map_url")
+                if activity.get("map_url") != _map_search_url(str(activity.get("map_query", ""))):
+                    raise TokenError("map_url does not match activity map_query")
+            expected_leg_count = max(0, len(activities) - 1)
+            legs = day.get("legs")
+            if not isinstance(legs, list) or len(legs) != expected_leg_count:
+                raise TokenError("day legs do not match adjacent activities")
+            for index, leg in enumerate(legs):
+                if leg.get("suggested_mode") not in TRAVEL_MODES:
+                    raise TokenError("invalid leg suggested_mode")
+                if not isinstance(leg.get("from"), dict) or not isinstance(leg.get("to"), dict):
+                    raise TokenError("leg endpoints are missing")
+                origin = activities[index]
+                destination = activities[index + 1]
+                if (
+                    leg["from"].get("activity_id") != origin.get("id")
+                    or leg["to"].get("activity_id") != destination.get("id")
+                    or leg["from"].get("map_query") != origin.get("map_query")
+                    or leg["to"].get("map_query") != destination.get("map_query")
+                ):
+                    raise TokenError("leg endpoints do not match adjacent activities")
+                route_urls = leg.get("route_urls")
+                if not isinstance(route_urls, dict) or set(route_urls) != set(TRAVEL_MODES):
+                    raise TokenError("leg route_urls must include transit, walking, and driving")
+                for mode in TRAVEL_MODES:
+                    _validate_google_maps_url(
+                        route_urls.get(mode),
+                        f"leg.route_urls.{mode}",
+                    )
+                expected_urls = _route_options(
+                    str(origin.get("map_query", "")),
+                    str(destination.get("map_query", "")),
+                )
+                if route_urls != expected_urls:
+                    raise TokenError("leg route URLs do not match adjacent activities")
 
 
 def parse_json_array(value: str, field_name: str) -> list[dict[str, Any]]:

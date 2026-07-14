@@ -22,6 +22,8 @@ from mcp.client.streamable_http import streamable_http_client
 
 EXPECTED_TOOLS = {
     "list_destinations",
+    "get_city_guide",
+    "get_route_options",
     "plan_trip",
     "create_plan",
     "mutate_plan",
@@ -97,6 +99,40 @@ async def exercise_server(base_url: str) -> None:
             assert destinations["ok"] is True
             assert destinations["catalog_total"] == 69
             assert [item["id"] for item in destinations["destinations"]] == ["tokyo"]
+            assert destinations["destinations"][0]["hero_url"].startswith(
+                f"{base_url}/viewer/assets/heroes/"
+            )
+
+            guide = structured(
+                await session.call_tool(
+                    "get_city_guide",
+                    {"destination_id": "괌", "phrase_query": "감사"},
+                )
+            )
+            assert guide["ok"] is True
+            assert guide["destination"]["id"] == "guam"
+            assert guide["destination"]["hero_url"].startswith(base_url)
+            assert guide["clocks"]["seoul"]["time_zone"] == "Asia/Seoul"
+            assert guide["clocks"]["local"]["time_zone"] == guide["destination"]["time_zone"]
+            assert guide["exchange"]["currency"] == "USD"
+            assert guide["exchange"]["fetched_at"]
+            assert guide["exchange"]["source"]
+
+            route_options = structured(
+                await session.call_tool(
+                    "get_route_options",
+                    {
+                        "from_place": "도쿄역",
+                        "to_place": "센소지",
+                        "suggested_mode": "walking",
+                    },
+                )
+            )
+            assert route_options["ok"] is True
+            assert route_options["from"] == "도쿄역"
+            assert route_options["to"] == "센소지"
+            assert route_options["suggested_mode"] == "walking"
+            assert set(route_options["route_urls"]) == {"transit", "walking", "driving"}
 
             planned = structured(
                 await session.call_tool(
@@ -112,6 +148,11 @@ async def exercise_server(base_url: str) -> None:
             assert planned["duration"]["selected_days"] == 6
             assert planned["shorter_variant"]["nights"] == 4
             assert len(planned["itinerary"]) == 6
+            first_day = planned["itinerary"][0]
+            assert len(first_day["legs"]) == len(first_day["activities"]) - 1
+            assert first_day["activities"][0]["activity_id"].startswith("act-")
+            assert first_day["activities"][0]["destination_id"] == "tokyo"
+            assert first_day["activities"][0]["location"]
             assert "html" not in planned or planned["html"] is None
             assert planned["content_token"].startswith("tp1.")
             assert planned["viewer_url"].startswith(f"{base_url}/viewer#plan=tp1.")
@@ -192,6 +233,22 @@ async def exercise_server(base_url: str) -> None:
                 catalog.raise_for_status()
                 assert catalog.json()["destinationCount"] == 69
 
+                city_guide = await client.get(
+                    f"{base_url}/api/city-guide/tokyo",
+                    params={"phrase_query": "계산"},
+                )
+                city_guide.raise_for_status()
+                guide_payload = city_guide.json()
+                assert guide_payload["ok"] is True
+                assert guide_payload["destination"]["id"] == "tokyo"
+                assert guide_payload["destination"]["hero_url"].startswith(base_url)
+                assert all("계산" in item["meaning"] for item in guide_payload["phrases"])
+
+                missing_guide = await client.get(
+                    f"{base_url}/api/city-guide/not-a-real-city"
+                )
+                assert missing_guide.status_code == 404
+
                 redirect = await client.get(f"{base_url}/view/{updated_token}")
                 assert redirect.status_code == 307
                 assert redirect.headers["location"].startswith("/viewer#plan=tp1.")
@@ -208,6 +265,7 @@ async def async_main(args: argparse.Namespace) -> None:
             "PORT": str(port),
             "PUBLIC_BASE_URL": base_url,
             "MCP_TRANSPORT": "streamable-http",
+            "LIVE_DATA_TIMEOUT": "0.5",
             "PYTHONDONTWRITEBYTECODE": "1",
             "PYTHONUNBUFFERED": "1",
         }

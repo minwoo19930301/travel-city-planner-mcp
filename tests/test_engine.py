@@ -1,4 +1,6 @@
 import asyncio
+from datetime import datetime
+from urllib.parse import parse_qs, urlsplit
 
 from planner import PlannerService
 from planner.live_data import LiveDataProvider
@@ -33,6 +35,28 @@ def test_default_summary_excludes_html_and_uses_place_queries() -> None:
     first = plan["days"][0]["activities"][0]
     assert first["location"] in first["map_query"]
     assert "query=" in first["map_url"]
+    compact = summary["itinerary"][0]["activities"][0]
+    assert compact["activity_id"] == first["id"]
+    assert compact["destination_id"] == "tokyo"
+    assert compact["location"] == first["location"]
+    assert compact["map_query"] == first["map_query"]
+
+
+def test_every_adjacent_activity_has_three_google_route_options() -> None:
+    service = PlannerService()
+    plan = run(service.plan_from_query("도쿄 4박 여행", include_live_data=False))
+    for day in plan["days"]:
+        assert len(day["legs"]) == max(0, len(day["activities"]) - 1)
+        for index, leg in enumerate(day["legs"]):
+            assert leg["from"]["activity_id"] == day["activities"][index]["id"]
+            assert leg["to"]["activity_id"] == day["activities"][index + 1]["id"]
+            assert leg["suggested_mode"] == "transit"
+            assert set(leg["route_urls"]) == {"transit", "walking", "driving"}
+            for mode, url in leg["route_urls"].items():
+                parsed = urlsplit(url)
+                assert parsed.scheme == "https"
+                assert parsed.hostname == "www.google.com"
+                assert parse_qs(parsed.query)["travelmode"] == [mode]
 
 
 def test_multicity_plan_merges_transfer_day() -> None:
@@ -62,3 +86,58 @@ def test_undated_weather_never_substitutes_current_conditions() -> None:
     weather = run(provider._weather([segment], service.catalog, client=None))
     assert weather["status"] == "date_required"
     assert "현재 날씨" in weather["message"]
+
+
+class GuideLiveData:
+    async def exchange_for_currency(self, currency):
+        return {
+            "status": "live",
+            "currency": currency,
+            "krw_per_unit": 9.125,
+            "fetched_at": "2026-07-14T00:00:00+00:00",
+            "source": "https://example.test/rates",
+            "updated_at": "2026-07-13T00:00:00+00:00",
+        }
+
+
+def test_city_guide_exposes_city_media_clocks_phrases_map_and_exchange() -> None:
+    service = PlannerService(live_data=GuideLiveData())
+    guide = run(service.city_guide("도쿄", phrase_query="계산"))
+    assert guide["destination"]["id"] == "tokyo"
+    assert guide["destination"]["hero_image"].endswith("tokyo.jpg")
+    assert guide["destination"]["time_zone"] == "Asia/Tokyo"
+    assert guide["language"] == "日本語"
+    assert guide["phrases"]
+    assert all("계산" in phrase["meaning"] for phrase in guide["phrases"])
+    assert urlsplit(guide["map_url"]).hostname == "www.google.com"
+    assert guide["exchange"]["currency"] == "JPY"
+    assert guide["exchange"]["krw_per_unit"] == 9.125
+    seoul = datetime.fromisoformat(guide["clocks"]["seoul"]["iso"])
+    local = datetime.fromisoformat(guide["clocks"]["local"]["iso"])
+    assert seoul.utcoffset() is not None
+    assert local.utcoffset() is not None
+
+
+def test_all_69_city_guides_have_valid_timezone_image_and_language_data() -> None:
+    service = PlannerService(live_data=GuideLiveData())
+    for destination in service.catalog.destinations.values():
+        guide = run(service.city_guide(destination["cityKo"]))
+        assert guide["destination"]["id"] == destination["id"]
+        assert guide["destination"]["hero_image"] == destination["heroImage"]
+        assert guide["destination"]["hero_url"].endswith(destination["heroImage"])
+        assert guide["clocks"]["local"]["time_zone"] == destination["timeZone"]
+        assert guide["language"] == destination["phraseLabel"]
+        assert guide["phrases"] == destination["phrases"]
+
+
+def test_arbitrary_route_options_are_official_google_maps_urls() -> None:
+    service = PlannerService()
+    result = service.route_options("도쿄역", "센소지", "walking")
+    assert result["from"] == "도쿄역"
+    assert result["to"] == "센소지"
+    assert result["suggested_mode"] == "walking"
+    assert set(result["route_urls"]) == {"transit", "walking", "driving"}
+    assert all(
+        urlsplit(value).hostname == "www.google.com"
+        for value in result["route_urls"].values()
+    )

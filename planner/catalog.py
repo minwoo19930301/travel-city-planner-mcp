@@ -62,10 +62,17 @@ class Catalog:
         normalized = normalize_text(query)
         candidates: list[tuple[int, int, str, str]] = []
         for alias, destination_id in self._aliases.items():
-            if len(alias) < 2:
-                continue
             escaped = re.escape(alias)
-            if re.search(r"[a-z]", alias):
+            if len(alias) == 1:
+                # 괌/빈처럼 한 글자인 실제 도시명은 한국어 조사 또는 경계가
+                # 확인될 때만 자연어에서 인식한다. 이렇게 해야 "빈티지" 같은
+                # 일반 단어의 한 글자 부분 문자열을 도시로 오인하지 않는다.
+                pattern = (
+                    rf"(?<![가-힣a-z0-9]){escaped}"
+                    rf"(?=$|[^가-힣a-z0-9]|(?:으로|에서|여행|에|을|를|도|과|와|은|는)"
+                    rf"(?=$|[^가-힣a-z0-9]))"
+                )
+            elif re.search(r"[a-z]", alias):
                 pattern = rf"(?<![a-z0-9]){escaped}(?![a-z0-9])"
             else:
                 pattern = escaped

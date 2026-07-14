@@ -8,13 +8,14 @@ from urllib.parse import urlparse
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ToolAnnotations
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from starlette.requests import Request
 from starlette.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 
 from planner import PlannerService
 from planner.catalog import CatalogError
 from planner.engine import PlannerError, parse_json_array
+from planner.live_data import LiveDataProvider
 from planner.render import legacy_share_url, legacy_v3_payload, render_export_html
 from planner.tokens import TokenError, encode_content_token
 
@@ -31,6 +32,9 @@ LEGACY_VIEWER_URL = os.environ.get(
 service = PlannerService(
     public_base_url=PUBLIC_BASE_URL,
     legacy_viewer_url=LEGACY_VIEWER_URL,
+    live_data=LiveDataProvider(
+        timeout=max(0.25, min(float(os.environ.get("LIVE_DATA_TIMEOUT", "5")), 30.0))
+    ),
 )
 
 
@@ -63,7 +67,7 @@ TRANSPORT_SECURITY = TransportSecuritySettings(
 class ToolOutput(BaseModel):
     """Strict base so MCP clients receive useful structured output schemas."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
 
 class CurrencyOutput(ToolOutput):
@@ -84,6 +88,7 @@ class DestinationOutput(ToolOutput):
     default_days: int
     summary: str
     hero_image: str
+    hero_url: str
 
 
 class DestinationListOutput(ToolOutput):
@@ -117,9 +122,34 @@ class SegmentOutput(ToolOutput):
 
 
 class ActivityOutput(ToolOutput):
+    activity_id: str
+    destination_id: str
     time: str
     title: str
+    location: str
+    map_query: str
     map_url: str
+    memo: str
+
+
+class RouteUrlsOutput(ToolOutput):
+    transit: str
+    walking: str
+    driving: str
+
+
+class LegPlaceOutput(ToolOutput):
+    activity_id: str
+    title: str
+    location: str
+    map_query: str
+
+
+class LegOutput(ToolOutput):
+    from_: LegPlaceOutput = Field(alias="from", serialization_alias="from")
+    to: LegPlaceOutput
+    suggested_mode: str
+    route_urls: RouteUrlsOutput
 
 
 class ItineraryDayOutput(ToolOutput):
@@ -128,6 +158,7 @@ class ItineraryDayOutput(ToolOutput):
     title: str
     destinations: list[str]
     route_map_url: str
+    legs: list[LegOutput]
     activities: list[ActivityOutput]
 
 
@@ -147,6 +178,72 @@ class ExchangeOutput(ToolOutput):
     status: str
     base: str | None = None
     rates: list[dict[str, Any]]
+    fetched_at: str | None = None
+    source: str | None = None
+    updated_at: str | None = None
+
+
+class ClockValueOutput(ToolOutput):
+    time_zone: str
+    iso: str
+    date: str
+    time: str
+
+
+class ClocksOutput(ToolOutput):
+    fetched_at: str
+    seoul: ClockValueOutput
+    local: ClockValueOutput
+
+
+class PhraseOutput(ToolOutput):
+    text: str
+    pron: str
+    meaning: str
+
+
+class GuideDestinationOutput(ToolOutput):
+    id: str
+    city: str
+    city_ko: str
+    country_ko: str
+    hero_image: str
+    hero_url: str
+    time_zone: str
+    currency: CurrencyOutput
+
+
+class GuideExchangeOutput(ToolOutput):
+    status: str
+    currency: str
+    krw_per_unit: float | None = None
+    fetched_at: str
+    source: str
+    updated_at: str | None = None
+    message: str | None = None
+
+
+class CityGuideOutput(ToolOutput):
+    ok: bool
+    error: str | None = None
+    message: str | None = None
+    destination: GuideDestinationOutput | None = None
+    clocks: ClocksOutput | None = None
+    language: str | None = None
+    phrases: list[PhraseOutput] | None = None
+    map_url: str | None = None
+    exchange: GuideExchangeOutput | None = None
+
+
+class RouteOptionsOutput(ToolOutput):
+    ok: bool
+    error: str | None = None
+    message: str | None = None
+    from_: str | None = Field(default=None, alias="from", serialization_alias="from")
+    to: str | None = None
+    suggested_mode: str | None = None
+    route_urls: RouteUrlsOutput | None = None
+    note: str | None = None
 
 
 class PlanOutput(ToolOutput):
@@ -207,6 +304,12 @@ READ_ONLY = ToolAnnotations(
     destructiveHint=False,
     idempotentHint=True,
     openWorldHint=False,
+)
+READ_ONLY_LIVE = ToolAnnotations(
+    readOnlyHint=True,
+    destructiveHint=False,
+    idempotentHint=False,
+    openWorldHint=True,
 )
 CREATE_WITH_LIVE_DATA = ToolAnnotations(
     readOnlyHint=False,
@@ -294,6 +397,20 @@ async def catalog_file(_: Request) -> FileResponse:
     return FileResponse(service.catalog.path, media_type="application/json")
 
 
+@mcp.custom_route("/api/city-guide/{destination_id}", methods=["GET"])
+async def city_guide_api(request: Request) -> JSONResponse:
+    """Same-origin JSON bridge used by a reopened viewer token."""
+    destination_id = request.path_params["destination_id"]
+    phrase_query = request.query_params.get("phrase_query", "")
+    try:
+        payload = await service.city_guide(destination_id, phrase_query=phrase_query)
+        return JSONResponse(payload)
+    except CatalogError as exc:
+        return JSONResponse(_error_payload(exc), status_code=404)
+    except (PlannerError, TokenError, ValueError) as exc:
+        return JSONResponse(_error_payload(exc), status_code=400)
+
+
 @mcp.custom_route("/examples/demo-plan.json", methods=["GET"])
 async def demo_file(_: Request) -> FileResponse | JSONResponse:
     target = ROOT / "examples" / "demo-plan.json"
@@ -318,7 +435,13 @@ def list_destinations(
         region: asia, north-america, europe, africa, resort, south-america 또는 한글 지역명.
         limit: 1~100.
     """
-    rows = service.catalog.search(query=search, region=region, limit=limit)
+    rows = [
+        {
+            **row,
+            "hero_url": f"{PUBLIC_BASE_URL}/viewer/{row['hero_image']}",
+        }
+        for row in service.catalog.search(query=search, region=region, limit=limit)
+    ]
     return DestinationListOutput(
         ok=True,
         count=len(rows),
@@ -326,6 +449,46 @@ def list_destinations(
         catalog_digest=service.catalog.digest,
         destinations=rows,
     )
+
+
+@mcp.tool(title="Get a city's live guide, clocks, phrases, map, and exchange rate", annotations=READ_ONLY_LIVE)
+async def get_city_guide(
+    destination_id: str,
+    phrase_query: str = "",
+) -> CityGuideOutput:
+    """도시별 이미지·현지/서울 시각·기본 회화·지도·최신 원화 환율을 반환합니다.
+
+    Args:
+        destination_id: canonical id 또는 한글/영문 도시명. 예: tokyo, 도쿄, 빈, 괌.
+        phrase_query: 선택 사항. 원문·발음·한국어 뜻에서 검색해 회화만 필터합니다.
+    """
+    try:
+        return CityGuideOutput.model_validate(
+            await service.city_guide(destination_id, phrase_query=phrase_query)
+        )
+    except (PlannerError, CatalogError, TokenError, ValueError) as exc:
+        return CityGuideOutput.model_validate(_error_payload(exc))
+
+
+@mcp.tool(title="Build Google Maps route options between two places", annotations=READ_ONLY)
+def get_route_options(
+    from_place: str,
+    to_place: str,
+    suggested_mode: str = "transit",
+) -> RouteOptionsOutput:
+    """두 장소 사이의 대중교통·도보·자동차 Google Maps 공식 경로 URL을 만듭니다.
+
+    Args:
+        from_place: 출발 장소명 또는 주소.
+        to_place: 도착 장소명 또는 주소.
+        suggested_mode: transit, walking, driving 중 기본으로 보여줄 이동수단.
+    """
+    try:
+        return RouteOptionsOutput.model_validate(
+            service.route_options(from_place, to_place, suggested_mode)
+        )
+    except (PlannerError, CatalogError, TokenError, ValueError) as exc:
+        return RouteOptionsOutput.model_validate(_error_payload(exc))
 
 
 @mcp.tool(title="Plan a trip from a natural-language request", annotations=CREATE_WITH_LIVE_DATA)

@@ -2,14 +2,14 @@
 
 원본 **Tour City Planner**의 69개 도시 템플릿을 하나의 canonical JSON으로 보존하고, 자연어 요청을 커스터마이징 가능한 여행 계획으로 바꾸는 Python FastMCP v1 서버입니다.
 
-`도쿄로 4-5박 정도 머무를 건데 애니와 맛집 위주로 추천 플래너 짜줘`처럼 말하면 5박 6일 기본안과 4박 5일 단축 힌트가 즉시 나옵니다. 날짜가 없을 때 현재 날씨를 여행 날짜의 날씨처럼 표시하지 않습니다.
+`도쿄로 4-5박 정도 머무를 건데 애니와 맛집 위주로 추천 플래너 짜줘`처럼 말하면 5박 6일 기본안과 4박 5일 단축 힌트가 즉시 나옵니다. 날짜가 없을 때 현재 날씨를 여행 날짜의 날씨처럼 표시하지 않습니다. 결과 viewer에는 선택 도시의 이미지, 서울·현지 실시간 시계, 최신 KRW 환율, 도시별 기본 회화, 장소별 지도와 인접 장소 사이 이동 경로가 함께 표시됩니다.
 
-![도쿄 5박 6일 가상 데모](docs/previews/travel-tokyo-5n6d.jpg)
+![파리와 빈 멀티시티 모바일 데모](docs/previews/travel-paris-vienna-live.jpg)
 
 ## 핵심 구조
 
 - `data/destinations.json`: 원본 69개 `DESTINATIONS`의 유일한 원장. MCP와 viewer가 같은 파일을 읽습니다.
-- `planner/`: 자연어 기간·도시 파싱, 템플릿 계획, 다도시 병합, 압축 토큰, revision mutation, 날씨·환율, export.
+- `planner/`: 자연어 기간·도시 파싱, 템플릿 계획, 다도시 병합, 압축 토큰, revision mutation, 날씨·환율·시계·경로, export.
 - `viewer/`: 빌드 과정 없는 모바일 정적 viewer. `tp1.` content token을 브라우저에서 직접 압축 해제합니다.
 - `examples/demo-plan.json`: 실제 예약이나 개인 정보가 아닌 fictional 도쿄 5박 6일 데모.
 - `tests/`: 69개 데이터, 4-5박 해석, 날씨 안전장치, 다도시, token 재시작 복원, revision 충돌, 지도 query, legacy 규격 테스트.
@@ -19,6 +19,8 @@
 | 도구 | 용도 |
 |---|---|
 | `list_destinations` | 69개 도시를 한글/영문/지역으로 검색 |
+| `get_city_guide` | 도시 이미지·서울/현지 시각·기본 회화·지도·최신 환율 조회 |
+| `get_route_options` | 두 장소 사이 대중교통·도보·자동차 Google Maps 경로 생성 |
 | `plan_trip` | 한국어 자연어를 즉시 일정으로 변환 |
 | `create_plan` | JSON segments로 단일/다도시 일정 생성 |
 | `mutate_plan` | revision 확인 후 활동 추가·수정·삭제·이동 |
@@ -29,6 +31,16 @@
 기본 생성/수정 응답에는 `html`이 없습니다. `summary`, compact itinerary, `content_token`, `viewer_url`만 반환하며, 큰 HTML은 `export_plan(content_token, format="html")`로 받습니다. `include_html=true`는 명시적인 호환 옵션입니다.
 
 모든 도구는 문자열 안에 JSON을 숨기지 않고 MCP `structuredContent`와 명시적인 `outputSchema`를 반환합니다. 도구별 title과 read-only/destructive/idempotent/open-world 힌트도 함께 노출합니다.
+
+## 여행 중 유틸리티
+
+- **도시별 이미지:** 69개 목적지 모두 서로 다른 hero를 가지며, 멀티시티 viewer에는 각 segment 이미지가 함께 표시됩니다. 알 수 없는 도시 ID를 도쿄로 조용히 바꾸지 않고 오류로 처리합니다.
+- **서울·현지 시간:** IANA time zone과 브라우저 `Intl.DateTimeFormat`으로 1초마다 갱신합니다. `get_city_guide`는 동일 시점의 ISO 시각과 UTC offset이 반영된 snapshot도 반환합니다.
+- **최신 환율:** 일정 생성 시와 viewer 재오픈 시 `open.er-api.com`에서 `현지 통화 1단위 → KRW`를 조회하고 viewer가 15분마다 새로 확인합니다. 조회시각·제공처 갱신시각·실패 상태를 구분하며, API 제공값보다 더 실시간인 것처럼 꾸미지 않습니다. 양방향 금액 계산기도 포함합니다.
+- **기본 번역/회화:** 원본에 있던 도시별 251개 표현을 현지어·발음·한국어 뜻으로 표시하고 검색합니다. 임의 문장을 번역했다고 추측하지 않습니다.
+- **지도와 이동:** 각 장소의 Google Maps 검색, 하루 전체 route, 모든 인접 장소 A→B의 `transit`·`walking`·`driving` 링크를 제공합니다. 거리·소요시간·운행 여부는 임의 생성하지 않고 링크를 여는 시점의 Google Maps 결과로 확인합니다.
+
+공식 [Google Maps URLs](https://developers.google.com/maps/documentation/urls/get-started)는 API key 없이 검색과 길찾기를 열 수 있습니다. 화면 안 공식 Google Maps Embed API는 별도 key가 필요하므로 이 프로젝트는 공개 key를 묶지 않고 공식 외부 경로 링크를 기본값으로 사용합니다.
 
 ## 자연어 예시
 
@@ -93,11 +105,11 @@ docker build -t travel-city-planner-mcp .
 docker run --rm -p 8000:8000 -e PUBLIC_BASE_URL=http://localhost:8000 travel-city-planner-mcp
 ```
 
-`scripts/smoke_mcp.py`는 임의의 로컬 포트에서 실제 Streamable HTTP 서버를 띄워 initialize/listTools/callTool, 알 수 없는 Host 거부, 도쿄 4-5박 생성, token 복원, revision 충돌, HTML·legacy export, viewer·catalog 경로까지 왕복 검증합니다.
+`scripts/smoke_mcp.py`는 임의의 로컬 포트에서 실제 Streamable HTTP 서버를 띄워 initialize/listTools/callTool, 알 수 없는 Host 거부, 비도쿄 도시 guide, 기본 회화, 세 이동수단 경로, 도쿄 4-5박 생성, token 복원, revision 충돌, HTML·legacy export, viewer·catalog·live guide 경로까지 왕복 검증합니다.
 
 ## 공유 호환 규격
 
-새 viewer는 `tp1.<base64url(zlib(JSON))>` content token을 사용합니다. plan schema v1에는 `plan_id`, `revision`, `segments`, `days`, 활동의 `location`/`map_query`, live-data 상태가 포함됩니다.
+새 viewer는 `tp1.<base64url(zlib(JSON))>` content token을 사용합니다. plan schema v1에는 `plan_id`, `revision`, `segments`, `days`, 활동의 `location`/`map_query`, 인접 활동별 `legs`, live-data 상태가 포함됩니다. 초기 배포에서 발급한 `legs` 없는 v1 token도 열 때 결정적으로 보완하므로 계속 사용할 수 있습니다.
 
 `export_plan(format="legacy_v3")`은 원본 Tour City Planner의 다음 규격을 생성합니다.
 

@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "plan_id": "91f08c4b967a",
+  "plan_id": "7c7b5a74a33b",
   "revision": 1,
-  "created_at": "2026-07-13T18:23:29+00:00",
-  "updated_at": "2026-07-13T18:23:29+00:00",
+  "created_at": "2026-07-14T01:11:59+00:00",
+  "updated_at": "2026-07-14T01:11:59+00:00",
   "title": "도쿄 5박 6일",
   "source_query": "도쿄로 4-5박 정도 머무르며 애니, 야경, 카페를 즐기는 가상 여행 추천 플래너",
   "duration": {
@@ -47,7 +47,7 @@
       ],
       "activities": [
         {
-          "id": "act-450976c1d8",
+          "id": "act-651af37739",
           "destination_id": "tokyo",
           "time": "10:00",
           "title": "시부야 스크램블",
@@ -60,7 +60,7 @@
           "template_day": 0
         },
         {
-          "id": "act-b53e0cbb3f",
+          "id": "act-8ab6cd9bdf",
           "destination_id": "tokyo",
           "time": "13:00",
           "title": "메이지 신궁",
@@ -73,7 +73,7 @@
           "template_day": 0
         },
         {
-          "id": "act-e7c38ca5fa",
+          "id": "act-28106062a6",
           "destination_id": "tokyo",
           "time": "18:30",
           "title": "시부야 스카이",
@@ -87,7 +87,49 @@
         }
       ],
       "route_summary": "시부야 스크램블 → 메이지 신궁 → 시부야 스카이",
-      "route_map_url": "https://www.google.com/maps/dir/?api=1&origin=Shibuya+Scramble+Crossing%2C+Tokyo&destination=Shibuya+Sky%2C+Tokyo&travelmode=transit&waypoints=Meiji+Jingu%2C+Tokyo"
+      "route_map_url": "https://www.google.com/maps/dir/?api=1&origin=Shibuya+Scramble+Crossing%2C+Tokyo&destination=Shibuya+Sky%2C+Tokyo&travelmode=transit&waypoints=Meiji+Jingu%2C+Tokyo",
+      "legs": [
+        {
+          "from": {
+            "activity_id": "act-651af37739",
+            "title": "시부야 스크램블",
+            "location": "Shibuya Scramble Crossing",
+            "map_query": "Shibuya Scramble Crossing, Tokyo"
+          },
+          "to": {
+            "activity_id": "act-8ab6cd9bdf",
+            "title": "메이지 신궁",
+            "location": "Meiji Jingu",
+            "map_query": "Meiji Jingu, Tokyo"
+          },
+          "suggested_mode": "transit",
+          "route_urls": {
+            "transit": "https://www.google.com/maps/dir/?api=1&origin=Shibuya+Scramble+Crossing%2C+Tokyo&destination=Meiji+Jingu%2C+Tokyo&travelmode=transit",
+            "walking": "https://www.google.com/maps/dir/?api=1&origin=Shibuya+Scramble+Crossing%2C+Tokyo&destination=Meiji+Jingu%2C+Tokyo&travelmode=walking",
+            "driving": "https://www.google.com/maps/dir/?api=1&origin=Shibuya+Scramble+Crossing%2C+Tokyo&destination=Meiji+Jingu%2C+Tokyo&travelmode=driving"
+          }
+        },
+        {
+          "from": {
+            "activity_id": "act-8ab6cd9bdf",
+            "title": "메이지 신궁",
+            "location": "Meiji Jingu",
+            "map_query": "Meiji Jingu, Tokyo"
+          },
+          "to": {
+            "activity_id": "act-28106062a6",
+            "title": "시부야 스카이",
+            "location": "Shibuya Sky",
+            "map_query": "Shibuya Sky, Tokyo"
+          },
+          "suggested_mode": "transit",
+          "route_urls": {
+            "transit": "https://www.google.com/maps/dir/?api=1&origin=Meiji+Jingu%2C+Tokyo&destination=Shibuya+Sky%2C+Tokyo&travelmode=transit",
+            "walking": "https://www.google.com/maps/dir/?api=1&origin=Meiji+Jingu%2C+Tokyo&destination=Shibuya+Sky%2C+Tokyo&travelmode=walking",
+            "driving": "https://www.google.com/maps/dir/?api=1&origin=Meiji+Jingu%2C+Tokyo&destination=Shibuya+Sky%2C+Tokyo&travelmode=driving"
+          }
+        }
+      ]
     },
     {
       "day": 2,
@@ -98,7 +140,7 @@
       ],
       "activities": [
         {
-          "id": "act-be8ebd509d",
+          "id": "act-d1169a2a6f",
           "destination_id": "tokyo",
           "time": "10:30",
           "title": "센소지",
@@ -111,7 +153,7 @@
           "template_day": 1
         },
         {
-          "id": "act-da80eb884b",
+          "id": "act-a6bc867a95",
           "destination_id": "tokyo",
           "time": "13:30",
           "title": "나카미세 거리",
@@ -124,7 +166,7 @@
           "template_day": 1
         },
         {
-          "id": "act-d0f29635c3",
+          "id": "act-d4513f6093",
           "destination_id": "tokyo",
           "time": "18:00",
           "title": "도쿄 스카이트리",
@@ -138,7 +180,49 @@
         }
       ],
       "route_summary": "센소지 → 나카미세 거리 → 도쿄 스카이트리",
-      "route_map_url": "https://www.google.com/maps/dir/?api=1&origin=Senso-ji%2C+Tokyo&destination=Tokyo+Skytree%2C+Tokyo&travelmode=transit&waypoints=Nakamise-dori+Street%2C+Tokyo"
+      "route_map_url": "https://www.google.com/maps/dir/?api=1&origin=Senso-ji%2C+Tokyo&destination=Tokyo+Skytree%2C+Tokyo&travelmode=transit&waypoints=Nakamise-dori+Street%2C+Tokyo",
+      "legs": [
+        {
+          "from": {
+            "activity_id": "act-d1169a2a6f",
+            "title": "센소지",
+            "location": "Senso-ji",
+            "map_query": "Senso-ji, Tokyo"
+          },
+          "to": {
+            "activity_id": "act-a6bc867a95",
+            "title": "나카미세 거리",
+            "location": "Nakamise-dori Street",
+            "map_query": "Nakamise-dori Street, Tokyo"
+          },
+          "suggested_mode": "transit",
+          "route_urls": {
+            "transit": "https://www.google.com/maps/dir/?api=1&origin=Senso-ji%2C+Tokyo&destination=Nakamise-dori+Street%2C+Tokyo&travelmode=transit",
+            "walking": "https://www.google.com/maps/dir/?api=1&origin=Senso-ji%2C+Tokyo&destination=Nakamise-dori+Street%2C+Tokyo&travelmode=walking",
+            "driving": "https://www.google.com/maps/dir/?api=1&origin=Senso-ji%2C+Tokyo&destination=Nakamise-dori+Street%2C+Tokyo&travelmode=driving"
+          }
+        },
+        {
+          "from": {
+            "activity_id": "act-a6bc867a95",
+            "title": "나카미세 거리",
+            "location": "Nakamise-dori Street",
+            "map_query": "Nakamise-dori Street, Tokyo"
+          },
+          "to": {
+            "activity_id": "act-d4513f6093",
+            "title": "도쿄 스카이트리",
+            "location": "Tokyo Skytree",
+            "map_query": "Tokyo Skytree, Tokyo"
+          },
+          "suggested_mode": "transit",
+          "route_urls": {
+            "transit": "https://www.google.com/maps/dir/?api=1&origin=Nakamise-dori+Street%2C+Tokyo&destination=Tokyo+Skytree%2C+Tokyo&travelmode=transit",
+            "walking": "https://www.google.com/maps/dir/?api=1&origin=Nakamise-dori+Street%2C+Tokyo&destination=Tokyo+Skytree%2C+Tokyo&travelmode=walking",
+            "driving": "https://www.google.com/maps/dir/?api=1&origin=Nakamise-dori+Street%2C+Tokyo&destination=Tokyo+Skytree%2C+Tokyo&travelmode=driving"
+          }
+        }
+      ]
     },
     {
       "day": 3,
@@ -149,7 +233,7 @@
       ],
       "activities": [
         {
-          "id": "act-0efdaa5697",
+          "id": "act-a647770d51",
           "destination_id": "tokyo",
           "time": "10:30",
           "title": "긴자 카페",
@@ -162,7 +246,7 @@
           "template_day": 2
         },
         {
-          "id": "act-0facab6e78",
+          "id": "act-829e1dcb45",
           "destination_id": "tokyo",
           "time": "14:00",
           "title": "캐릭터 스트리트",
@@ -175,7 +259,7 @@
           "template_day": 2
         },
         {
-          "id": "act-86955d7bd2",
+          "id": "act-cde7a3733e",
           "destination_id": "tokyo",
           "time": "19:00",
           "title": "마루노우치 야경",
@@ -189,7 +273,49 @@
         }
       ],
       "route_summary": "긴자 카페 → 캐릭터 스트리트 → 마루노우치 야경",
-      "route_map_url": "https://www.google.com/maps/dir/?api=1&origin=Ginza%2C+Tokyo&destination=Marunouchi%2C+Tokyo&travelmode=transit&waypoints=Tokyo+Character+Street%2C+Tokyo"
+      "route_map_url": "https://www.google.com/maps/dir/?api=1&origin=Ginza%2C+Tokyo&destination=Marunouchi%2C+Tokyo&travelmode=transit&waypoints=Tokyo+Character+Street%2C+Tokyo",
+      "legs": [
+        {
+          "from": {
+            "activity_id": "act-a647770d51",
+            "title": "긴자 카페",
+            "location": "Ginza",
+            "map_query": "Ginza, Tokyo"
+          },
+          "to": {
+            "activity_id": "act-829e1dcb45",
+            "title": "캐릭터 스트리트",
+            "location": "Tokyo Character Street",
+            "map_query": "Tokyo Character Street, Tokyo"
+          },
+          "suggested_mode": "transit",
+          "route_urls": {
+            "transit": "https://www.google.com/maps/dir/?api=1&origin=Ginza%2C+Tokyo&destination=Tokyo+Character+Street%2C+Tokyo&travelmode=transit",
+            "walking": "https://www.google.com/maps/dir/?api=1&origin=Ginza%2C+Tokyo&destination=Tokyo+Character+Street%2C+Tokyo&travelmode=walking",
+            "driving": "https://www.google.com/maps/dir/?api=1&origin=Ginza%2C+Tokyo&destination=Tokyo+Character+Street%2C+Tokyo&travelmode=driving"
+          }
+        },
+        {
+          "from": {
+            "activity_id": "act-829e1dcb45",
+            "title": "캐릭터 스트리트",
+            "location": "Tokyo Character Street",
+            "map_query": "Tokyo Character Street, Tokyo"
+          },
+          "to": {
+            "activity_id": "act-cde7a3733e",
+            "title": "마루노우치 야경",
+            "location": "Marunouchi",
+            "map_query": "Marunouchi, Tokyo"
+          },
+          "suggested_mode": "transit",
+          "route_urls": {
+            "transit": "https://www.google.com/maps/dir/?api=1&origin=Tokyo+Character+Street%2C+Tokyo&destination=Marunouchi%2C+Tokyo&travelmode=transit",
+            "walking": "https://www.google.com/maps/dir/?api=1&origin=Tokyo+Character+Street%2C+Tokyo&destination=Marunouchi%2C+Tokyo&travelmode=walking",
+            "driving": "https://www.google.com/maps/dir/?api=1&origin=Tokyo+Character+Street%2C+Tokyo&destination=Marunouchi%2C+Tokyo&travelmode=driving"
+          }
+        }
+      ]
     },
     {
       "day": 4,
@@ -200,7 +326,7 @@
       ],
       "activities": [
         {
-          "id": "act-e36d443a9e",
+          "id": "act-7b36ec6f6f",
           "destination_id": "tokyo",
           "time": "10:00",
           "title": "우에노 공원",
@@ -213,7 +339,7 @@
           "template_day": 3
         },
         {
-          "id": "act-ab3c550665",
+          "id": "act-c130db6dff",
           "destination_id": "tokyo",
           "time": "13:30",
           "title": "도쿄 국립박물관",
@@ -226,7 +352,7 @@
           "template_day": 3
         },
         {
-          "id": "act-7c1462715d",
+          "id": "act-aac189fd55",
           "destination_id": "tokyo",
           "time": "18:00",
           "title": "아키하바라",
@@ -240,7 +366,49 @@
         }
       ],
       "route_summary": "우에노 공원 → 도쿄 국립박물관 → 아키하바라",
-      "route_map_url": "https://www.google.com/maps/dir/?api=1&origin=Ueno+Park%2C+Tokyo&destination=Akihabara%2C+Tokyo&travelmode=transit&waypoints=Tokyo+National+Museum%2C+Tokyo"
+      "route_map_url": "https://www.google.com/maps/dir/?api=1&origin=Ueno+Park%2C+Tokyo&destination=Akihabara%2C+Tokyo&travelmode=transit&waypoints=Tokyo+National+Museum%2C+Tokyo",
+      "legs": [
+        {
+          "from": {
+            "activity_id": "act-7b36ec6f6f",
+            "title": "우에노 공원",
+            "location": "Ueno Park",
+            "map_query": "Ueno Park, Tokyo"
+          },
+          "to": {
+            "activity_id": "act-c130db6dff",
+            "title": "도쿄 국립박물관",
+            "location": "Tokyo National Museum",
+            "map_query": "Tokyo National Museum, Tokyo"
+          },
+          "suggested_mode": "transit",
+          "route_urls": {
+            "transit": "https://www.google.com/maps/dir/?api=1&origin=Ueno+Park%2C+Tokyo&destination=Tokyo+National+Museum%2C+Tokyo&travelmode=transit",
+            "walking": "https://www.google.com/maps/dir/?api=1&origin=Ueno+Park%2C+Tokyo&destination=Tokyo+National+Museum%2C+Tokyo&travelmode=walking",
+            "driving": "https://www.google.com/maps/dir/?api=1&origin=Ueno+Park%2C+Tokyo&destination=Tokyo+National+Museum%2C+Tokyo&travelmode=driving"
+          }
+        },
+        {
+          "from": {
+            "activity_id": "act-c130db6dff",
+            "title": "도쿄 국립박물관",
+            "location": "Tokyo National Museum",
+            "map_query": "Tokyo National Museum, Tokyo"
+          },
+          "to": {
+            "activity_id": "act-aac189fd55",
+            "title": "아키하바라",
+            "location": "Akihabara",
+            "map_query": "Akihabara, Tokyo"
+          },
+          "suggested_mode": "transit",
+          "route_urls": {
+            "transit": "https://www.google.com/maps/dir/?api=1&origin=Tokyo+National+Museum%2C+Tokyo&destination=Akihabara%2C+Tokyo&travelmode=transit",
+            "walking": "https://www.google.com/maps/dir/?api=1&origin=Tokyo+National+Museum%2C+Tokyo&destination=Akihabara%2C+Tokyo&travelmode=walking",
+            "driving": "https://www.google.com/maps/dir/?api=1&origin=Tokyo+National+Museum%2C+Tokyo&destination=Akihabara%2C+Tokyo&travelmode=driving"
+          }
+        }
+      ]
     },
     {
       "day": 5,
@@ -251,7 +419,7 @@
       ],
       "activities": [
         {
-          "id": "act-277ae94d5a",
+          "id": "act-4eded34266",
           "destination_id": "tokyo",
           "time": "11:00",
           "title": "도쿄 동네 자유 탐방",
@@ -264,7 +432,7 @@
           "template_day": 4
         },
         {
-          "id": "act-6fdd9532ca",
+          "id": "act-e63cf7991d",
           "destination_id": "tokyo",
           "time": "16:00",
           "title": "예약·휴식 버퍼",
@@ -278,7 +446,29 @@
         }
       ],
       "route_summary": "도쿄 동네 자유 탐방 → 예약·휴식 버퍼",
-      "route_map_url": "https://www.google.com/maps/dir/?api=1&origin=Tokyo+local+neighborhood%2C+Tokyo&destination=Tokyo+cafe%2C+Tokyo&travelmode=transit"
+      "route_map_url": "https://www.google.com/maps/dir/?api=1&origin=Tokyo+local+neighborhood%2C+Tokyo&destination=Tokyo+cafe%2C+Tokyo&travelmode=transit",
+      "legs": [
+        {
+          "from": {
+            "activity_id": "act-4eded34266",
+            "title": "도쿄 동네 자유 탐방",
+            "location": "Tokyo local neighborhood",
+            "map_query": "Tokyo local neighborhood, Tokyo"
+          },
+          "to": {
+            "activity_id": "act-e63cf7991d",
+            "title": "예약·휴식 버퍼",
+            "location": "Tokyo cafe",
+            "map_query": "Tokyo cafe, Tokyo"
+          },
+          "suggested_mode": "transit",
+          "route_urls": {
+            "transit": "https://www.google.com/maps/dir/?api=1&origin=Tokyo+local+neighborhood%2C+Tokyo&destination=Tokyo+cafe%2C+Tokyo&travelmode=transit",
+            "walking": "https://www.google.com/maps/dir/?api=1&origin=Tokyo+local+neighborhood%2C+Tokyo&destination=Tokyo+cafe%2C+Tokyo&travelmode=walking",
+            "driving": "https://www.google.com/maps/dir/?api=1&origin=Tokyo+local+neighborhood%2C+Tokyo&destination=Tokyo+cafe%2C+Tokyo&travelmode=driving"
+          }
+        }
+      ]
     },
     {
       "day": 6,
@@ -289,7 +479,7 @@
       ],
       "activities": [
         {
-          "id": "act-a511d0dc0b",
+          "id": "act-85d8cd03e9",
           "destination_id": "tokyo",
           "time": "10:00",
           "title": "돈키호테 쇼핑",
@@ -302,7 +492,7 @@
           "template_day": 5
         },
         {
-          "id": "act-b573746685",
+          "id": "act-befe61a550",
           "destination_id": "tokyo",
           "time": "13:00",
           "title": "공항 이동 준비",
@@ -315,7 +505,7 @@
           "template_day": 5
         },
         {
-          "id": "act-3037c8a9b1",
+          "id": "act-c747f8773e",
           "destination_id": "tokyo",
           "time": "16:30",
           "title": "하네다 이동",
@@ -329,7 +519,49 @@
         }
       ],
       "route_summary": "돈키호테 쇼핑 → 공항 이동 준비 → 하네다 이동",
-      "route_map_url": "https://www.google.com/maps/dir/?api=1&origin=Don+Quijote+Shibuya%2C+Tokyo&destination=Haneda+Airport%2C+Tokyo&travelmode=transit&waypoints=Tokyo+Station%2C+Tokyo"
+      "route_map_url": "https://www.google.com/maps/dir/?api=1&origin=Don+Quijote+Shibuya%2C+Tokyo&destination=Haneda+Airport%2C+Tokyo&travelmode=transit&waypoints=Tokyo+Station%2C+Tokyo",
+      "legs": [
+        {
+          "from": {
+            "activity_id": "act-85d8cd03e9",
+            "title": "돈키호테 쇼핑",
+            "location": "Don Quijote Shibuya",
+            "map_query": "Don Quijote Shibuya, Tokyo"
+          },
+          "to": {
+            "activity_id": "act-befe61a550",
+            "title": "공항 이동 준비",
+            "location": "Tokyo Station",
+            "map_query": "Tokyo Station, Tokyo"
+          },
+          "suggested_mode": "transit",
+          "route_urls": {
+            "transit": "https://www.google.com/maps/dir/?api=1&origin=Don+Quijote+Shibuya%2C+Tokyo&destination=Tokyo+Station%2C+Tokyo&travelmode=transit",
+            "walking": "https://www.google.com/maps/dir/?api=1&origin=Don+Quijote+Shibuya%2C+Tokyo&destination=Tokyo+Station%2C+Tokyo&travelmode=walking",
+            "driving": "https://www.google.com/maps/dir/?api=1&origin=Don+Quijote+Shibuya%2C+Tokyo&destination=Tokyo+Station%2C+Tokyo&travelmode=driving"
+          }
+        },
+        {
+          "from": {
+            "activity_id": "act-befe61a550",
+            "title": "공항 이동 준비",
+            "location": "Tokyo Station",
+            "map_query": "Tokyo Station, Tokyo"
+          },
+          "to": {
+            "activity_id": "act-c747f8773e",
+            "title": "하네다 이동",
+            "location": "Haneda Airport",
+            "map_query": "Haneda Airport, Tokyo"
+          },
+          "suggested_mode": "transit",
+          "route_urls": {
+            "transit": "https://www.google.com/maps/dir/?api=1&origin=Tokyo+Station%2C+Tokyo&destination=Haneda+Airport%2C+Tokyo&travelmode=transit",
+            "walking": "https://www.google.com/maps/dir/?api=1&origin=Tokyo+Station%2C+Tokyo&destination=Haneda+Airport%2C+Tokyo&travelmode=walking",
+            "driving": "https://www.google.com/maps/dir/?api=1&origin=Tokyo+Station%2C+Tokyo&destination=Haneda+Airport%2C+Tokyo&travelmode=driving"
+          }
+        }
+      ]
     }
   ],
   "live_data": {

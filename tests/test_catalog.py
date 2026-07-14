@@ -25,3 +25,21 @@ def test_catalog_search_uses_korean_and_region_aliases() -> None:
     europe = catalog.search(region="유럽", limit=100)
     assert europe
     assert all(item["region"] == "europe" for item in europe)
+
+
+def test_all_69_korean_city_names_resolve_from_natural_language() -> None:
+    catalog = Catalog()
+    resolved = {
+        catalog.find_mentions(f"{destination['cityKo']} 3박 여행")[0]["destination_id"]
+        for destination in catalog.destinations.values()
+    }
+    assert resolved == set(catalog.destinations)
+    assert catalog.find_mentions("괌으로 4박 여행")[0]["destination_id"] == "guam"
+    assert catalog.find_mentions("빈에서 3박 여행")[0]["destination_id"] == "austria"
+
+
+def test_single_character_city_aliases_do_not_match_arbitrary_substrings() -> None:
+    catalog = Catalog()
+    assert catalog.find_mentions("빈티지 숍과 가빈이라는 카페") == []
+    assert catalog.find_mentions("괌 여행")[0]["destination_id"] == "guam"
+    assert catalog.find_mentions("빈 여행")[0]["destination_id"] == "austria"

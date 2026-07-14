@@ -10,8 +10,12 @@ const tokenError = document.getElementById("token-error");
 
 let catalog;
 let currentPlan;
+let activeDestinationId = "";
+let clockTimer;
+let liveRefreshTimer;
 const MAX_TOKEN_CHARS = 350_000;
 const MAX_PLAN_BYTES = 2_000_000;
+const LIVE_REFRESH_MS = 15 * 60 * 1000;
 
 function element(tag, className = "", text = "") {
   const node = document.createElement(tag);
@@ -78,7 +82,22 @@ function planTokenFromLocation() {
 }
 
 function destinationFor(id) {
-  return catalog.destinations[id] || catalog.destinations.tokyo;
+  const destination = catalog.destinations[id];
+  if (!destination) throw new Error(`알 수 없는 목적지입니다: ${id}`);
+  return destination;
+}
+
+function uniqueDestinationIds(plan) {
+  return [...new Set(plan.segments.map((segment) => segment.destination_id))];
+}
+
+function directionsUrl(origin, destination, travelmode = "transit") {
+  const params = new URLSearchParams({ api: "1", origin, destination, travelmode });
+  return `https://www.google.com/maps/dir/?${params}`;
+}
+
+function routeQuery(activity) {
+  return String(activity.map_query || activity.location || activity.title || "").trim();
 }
 
 function setTheme(destination) {
@@ -125,7 +144,7 @@ function exchangeSummary(exchange) {
   }
   return {
     title: rates.map((rate) => `${rate.currency} ${Number(rate.krw_per_unit).toLocaleString("ko-KR")}원`).join(" · "),
-    detail: "1 현지 통화 단위 기준 · 실시간 조회값",
+    detail: "1 현지 통화 단위 기준 · 일정 생성 시 조회값",
   };
 }
 
@@ -166,13 +185,18 @@ function renderCover(plan, firstDestination) {
 function renderSegments(plan) {
   const board = element("section", "segment-board");
   plan.segments.forEach((segment, index) => {
+    const destination = destinationFor(segment.destination_id);
     const row = element("div", "segment-row");
     row.append(element("div", "segment-code", `SEG ${String(index + 1).padStart(2, "0")}`));
+    const image = document.createElement("img");
+    image.className = "segment-thumb";
+    image.src = `/viewer/${destination.heroImage}`;
+    image.alt = `${destination.cityKo} 풍경`;
     const city = element("div", "segment-city");
     city.append(element("strong", "", segment.city_ko), element("span", "", `${segment.country_ko} · ${segment.city}`));
     const duration = element("div", "segment-duration");
     duration.append(`${segment.nights} NIGHTS`, document.createElement("br"), `DAY ${segment.day_start}—${segment.day_end}`);
-    row.append(city, duration);
+    row.append(image, city, duration);
     board.append(row);
   });
   return board;
@@ -190,6 +214,248 @@ function renderStatus(plan) {
   return board;
 }
 
+function formatClock(timeZone, mode) {
+  const options = mode === "time"
+    ? { timeZone, hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }
+    : { timeZone, month: "short", day: "numeric", weekday: "short" };
+  return new Intl.DateTimeFormat("ko-KR", options).format(new Date()).replace("24:", "00:");
+}
+
+function updateClocks(root = document) {
+  root.querySelectorAll("[data-clock-zone]").forEach((node) => {
+    const zone = node.dataset.clockZone;
+    const time = node.querySelector("[data-clock-time]");
+    const date = node.querySelector("[data-clock-date]");
+    if (time) time.textContent = formatClock(zone, "time");
+    if (date) date.textContent = formatClock(zone, "date");
+  });
+}
+
+function clockRow(label, timeZone) {
+  const row = element("div", "clock-row");
+  row.dataset.clockZone = timeZone;
+  const copy = element("div");
+  copy.append(element("strong", "", label), element("span", "clock-zone", timeZone));
+  const value = element("div", "clock-value");
+  const time = element("time", "", "--:--:--");
+  time.dataset.clockTime = "";
+  const date = element("span", "", "—");
+  date.dataset.clockDate = "";
+  value.append(time, date);
+  row.append(copy, value);
+  return row;
+}
+
+function initialRate(plan, currency) {
+  return (plan.live_data?.exchange?.rates || []).find(
+    (rate) => rate.currency === currency && Number.isFinite(rate.krw_per_unit),
+  );
+}
+
+function setExchangeRate(panel, destination, rate, meta = {}) {
+  const numericRate = Number(rate);
+  const localInput = panel.querySelector("[data-local-amount]");
+  const krwInput = panel.querySelector("[data-krw-amount]");
+  const rateText = panel.querySelector("[data-rate-text]");
+  const metaText = panel.querySelector("[data-rate-meta]");
+  if (!Number.isFinite(numericRate) || numericRate <= 0) {
+    rateText.textContent = "환율 조회 불가";
+    metaText.textContent = meta.message || "마지막 정상값도 없습니다.";
+    localInput.disabled = true;
+    krwInput.disabled = true;
+    return;
+  }
+  panel.dataset.rate = String(numericRate);
+  localInput.disabled = false;
+  krwInput.disabled = false;
+  rateText.textContent = `1 ${destination.currency.code} = ${numericRate.toLocaleString("ko-KR", { maximumFractionDigits: 4 })} KRW`;
+  const fetched = meta.fetched_at ? new Date(meta.fetched_at).toLocaleString("ko-KR") : "일정 생성 시점";
+  metaText.textContent = `${fetched} 조회 · ${meta.source || "open.er-api.com"}`;
+  localInput.dispatchEvent(new Event("input"));
+}
+
+function renderExchangePanel(plan, destination) {
+  const panel = element("section", "guide-panel exchange-panel");
+  panel.append(element("span", "panel-label", "LIVE EXCHANGE / KRW"));
+  const rateText = element("strong", "rate-text", "환율 확인 중");
+  rateText.dataset.rateText = "";
+  const metaText = element("p", "rate-meta", "저장된 조회값을 확인합니다.");
+  metaText.dataset.rateMeta = "";
+  const fields = element("div", "exchange-fields");
+  const localLabel = document.createElement("label");
+  localLabel.append(element("span", "", destination.currency.code));
+  const localInput = document.createElement("input");
+  localInput.type = "number";
+  localInput.inputMode = "decimal";
+  localInput.min = "0";
+  localInput.value = "100";
+  localInput.dataset.localAmount = "";
+  localLabel.append(localInput);
+  const krwLabel = document.createElement("label");
+  krwLabel.append(element("span", "", "KRW"));
+  const krwInput = document.createElement("input");
+  krwInput.type = "number";
+  krwInput.inputMode = "numeric";
+  krwInput.min = "0";
+  krwInput.dataset.krwAmount = "";
+  krwLabel.append(krwInput);
+  fields.append(localLabel, krwLabel);
+  localInput.addEventListener("input", () => {
+    const rate = Number(panel.dataset.rate);
+    const amount = Number(localInput.value);
+    if (Number.isFinite(rate) && Number.isFinite(amount)) krwInput.value = String(Math.round(amount * rate));
+  });
+  krwInput.addEventListener("input", () => {
+    const rate = Number(panel.dataset.rate);
+    const amount = Number(krwInput.value);
+    if (Number.isFinite(rate) && rate > 0 && Number.isFinite(amount)) localInput.value = String(Math.round((amount / rate) * 100) / 100);
+  });
+  panel.append(rateText, metaText, fields);
+  const saved = initialRate(plan, destination.currency.code);
+  setExchangeRate(panel, destination, saved?.krw_per_unit, saved || {});
+  return panel;
+}
+
+function renderPhrasePanel(destination) {
+  const panel = element("section", "guide-panel phrase-panel");
+  const head = element("div", "phrase-head");
+  head.append(element("span", "panel-label", `BASIC PHRASES / ${destination.phraseLabel || "LOCAL"}`));
+  const search = document.createElement("input");
+  search.type = "search";
+  search.placeholder = "한국어 의미·현지어·발음 검색";
+  search.setAttribute("aria-label", `${destination.cityKo} 기본 회화 검색`);
+  head.append(search);
+  const list = element("div", "phrase-list");
+  const renderPhrases = () => {
+    const query = search.value.trim().toLocaleLowerCase("ko-KR");
+    const phrases = (destination.phrases || []).filter((phrase) =>
+      !query || [phrase.text, phrase.pron, phrase.meaning].some((value) => String(value).toLocaleLowerCase("ko-KR").includes(query)),
+    );
+    list.replaceChildren();
+    phrases.forEach((phrase) => {
+      const row = element("div", "phrase-row");
+      const local = element("div");
+      local.append(element("strong", "", phrase.text), element("span", "", phrase.pron));
+      row.append(local, element("p", "", phrase.meaning));
+      list.append(row);
+    });
+    if (!phrases.length) list.append(element("p", "phrase-empty", "일치하는 기본 회화가 없습니다."));
+  };
+  search.addEventListener("input", renderPhrases);
+  renderPhrases();
+  panel.append(head, list);
+  return panel;
+}
+
+async function refreshCityGuide(destinationId, panel) {
+  try {
+    const response = await fetch(`/api/city-guide/${encodeURIComponent(destinationId)}`, { cache: "no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload = await response.json();
+    if (!payload.ok) throw new Error(payload.message || "city guide unavailable");
+    const destination = destinationFor(destinationId);
+    const exchange = payload.exchange || {};
+    const rate = Number.isFinite(exchange.krw_per_unit)
+      ? exchange
+      : (exchange.rates || []).find((item) => item.currency === destination.currency.code);
+    setExchangeRate(panel, destination, rate?.krw_per_unit, rate || exchange);
+  } catch (error) {
+    const meta = panel.querySelector("[data-rate-meta]");
+    if (meta) meta.textContent = `자동 새로고침 실패 · 저장된 값 유지 (${error.message})`;
+  }
+}
+
+function renderGuideContent(plan, destinationId, content) {
+  activeDestinationId = destinationId;
+  const destination = destinationFor(destinationId);
+  setTheme(destination);
+  const clockPanel = element("section", "guide-panel clock-panel");
+  clockPanel.append(
+    element("span", "panel-label", "LIVE CLOCKS"),
+    clockRow("한국 · 서울", "Asia/Seoul"),
+    clockRow(`${destination.countryKo} · ${destination.cityKo}`, destination.timeZone),
+  );
+  const exchangePanel = renderExchangePanel(plan, destination);
+  const phrasePanel = renderPhrasePanel(destination);
+  content.replaceChildren(clockPanel, exchangePanel, phrasePanel);
+  updateClocks(clockPanel);
+  window.clearInterval(clockTimer);
+  window.clearInterval(liveRefreshTimer);
+  clockTimer = window.setInterval(updateClocks, 1000);
+  refreshCityGuide(destinationId, exchangePanel);
+  liveRefreshTimer = window.setInterval(() => refreshCityGuide(activeDestinationId, exchangePanel), LIVE_REFRESH_MS);
+}
+
+function renderTravelDesk(plan) {
+  const desk = element("section", "travel-desk");
+  const header = element("header", "desk-head");
+  header.append(element("h2", "", "여행 도구"), element("span", "", "LIVE / LOCAL / ROUTE"));
+  const tabs = element("div", "city-tabs");
+  const content = element("div", "guide-grid");
+  const ids = uniqueDestinationIds(plan);
+  ids.forEach((destinationId, index) => {
+    const destination = destinationFor(destinationId);
+    const button = element("button", index === 0 ? "active" : "", destination.cityKo);
+    button.type = "button";
+    button.addEventListener("click", () => {
+      tabs.querySelectorAll("button").forEach((item) => item.classList.toggle("active", item === button));
+      renderGuideContent(plan, destinationId, content);
+      const firstCityActivity = plan.days
+        .flatMap((day) => day.activities)
+        .find((activity) => activity.destination_id === destinationId);
+      if (firstCityActivity) showMapPreview(firstCityActivity, false);
+    });
+    tabs.append(button);
+  });
+  desk.append(header, tabs, content);
+  renderGuideContent(plan, ids[0], content);
+  return desk;
+}
+
+function showMapPreview(activity, shouldScroll = true) {
+  const title = document.querySelector("[data-map-title]");
+  const locationText = document.querySelector("[data-map-location]");
+  const open = document.querySelector("[data-map-open]");
+  if (!title || !locationText || !open) return;
+  title.textContent = activity.title;
+  locationText.textContent = activity.location || routeQuery(activity);
+  const url = safeHttpUrl(activity.map_url);
+  if (url) {
+    open.href = url;
+    open.removeAttribute("aria-disabled");
+  } else {
+    open.removeAttribute("href");
+    open.setAttribute("aria-disabled", "true");
+  }
+  if (shouldScroll) document.getElementById("map-desk")?.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function renderMapDesk(plan) {
+  const first = plan.days.flatMap((day) => day.activities)[0];
+  const desk = element("section", "map-desk");
+  desk.id = "map-desk";
+  const copy = element("div");
+  copy.append(element("span", "panel-label", "LIVE MAP"));
+  const title = element("h2", "", first?.title || "장소를 선택하세요");
+  title.dataset.mapTitle = "";
+  const locationText = element("p", "", first?.location || "일정의 VIEW 버튼을 누르면 이곳에 장소가 표시됩니다.");
+  locationText.dataset.mapLocation = "";
+  copy.append(title, locationText);
+  const open = element("a", "map-open", "GOOGLE 지도에서 실시간 보기");
+  open.dataset.mapOpen = "";
+  open.target = "_blank";
+  open.rel = "noreferrer";
+  const firstUrl = safeHttpUrl(first?.map_url);
+  if (firstUrl) {
+    open.href = firstUrl;
+  } else {
+    open.setAttribute("aria-disabled", "true");
+  }
+  const note = element("p", "map-note", "실제 지도·교통 상황·거리·소요시간은 링크를 여는 시점의 Google Maps 결과를 사용합니다.");
+  desk.append(copy, open, note);
+  return desk;
+}
+
 function renderActivity(activity) {
   const item = element("li", "stop");
   const time = document.createElement("time");
@@ -199,6 +465,10 @@ function renderActivity(activity) {
   const copy = element("div", "stop-copy");
   copy.append(element("strong", "", activity.title), element("span", "", activity.location));
   if (activity.memo) copy.append(element("small", "", activity.memo));
+  const actions = element("div", "stop-actions");
+  const preview = element("button", "map-preview", "VIEW");
+  preview.type = "button";
+  preview.addEventListener("click", () => showMapPreview(activity));
   const mapUrl = safeHttpUrl(activity.map_url);
   const map = element(mapUrl ? "a" : "span", "map-link", mapUrl ? "MAP" : "NO MAP");
   if (mapUrl) {
@@ -209,7 +479,33 @@ function renderActivity(activity) {
   } else {
     map.setAttribute("aria-disabled", "true");
   }
-  item.append(time, marker, copy, map);
+  actions.append(preview, map);
+  item.append(time, marker, copy, actions);
+  return item;
+}
+
+function renderLeg(fromActivity, toActivity, leg = {}) {
+  const from = routeQuery(fromActivity);
+  const to = routeQuery(toActivity);
+  const item = element("li", "travel-leg");
+  const label = element("span", "leg-label", `${fromActivity.title} → ${toActivity.title}`);
+  const links = element("div", "leg-links");
+  const options = [
+    ["TRANSIT", leg.transit_url || leg.route_urls?.transit || leg.routes?.transit || directionsUrl(from, to, "transit")],
+    ["WALK", leg.walking_url || leg.route_urls?.walking || leg.routes?.walking || directionsUrl(from, to, "walking")],
+    ["DRIVE", leg.driving_url || leg.route_urls?.driving || leg.routes?.driving || directionsUrl(from, to, "driving")],
+  ];
+  options.forEach(([name, rawUrl]) => {
+    const url = safeHttpUrl(rawUrl);
+    const link = element(url ? "a" : "span", "", name);
+    if (url) {
+      link.href = url;
+      link.target = "_blank";
+      link.rel = "noreferrer";
+    }
+    links.append(link);
+  });
+  item.append(label, links);
   return item;
 }
 
@@ -224,7 +520,11 @@ function renderItinerary(plan) {
     head.append(element("span", "day-code", `DAY ${String(day.day).padStart(2, "0")}`), element("span", "day-date", day.date || "DATE OPEN"), element("h3", "", day.title));
     const body = element("div");
     const stops = element("ol", "stops");
-    day.activities.forEach((activity) => stops.append(renderActivity(activity)));
+    day.activities.forEach((activity, index) => {
+      stops.append(renderActivity(activity));
+      const next = day.activities[index + 1];
+      if (next) stops.append(renderLeg(activity, next, (day.legs || day.route_legs || [])[index]));
+    });
     const routeUrl = safeHttpUrl(day.route_map_url);
     const route = element(routeUrl ? "a" : "span", "route-link", routeUrl ? "OPEN DAY ROUTE" : "ROUTE UNAVAILABLE");
     if (routeUrl) {
@@ -250,13 +550,15 @@ function renderSource(plan) {
 }
 
 function renderPlan(plan, { demo = false } = {}) {
+  window.clearInterval(clockTimer);
+  window.clearInterval(liveRefreshTimer);
   currentPlan = plan;
   const firstDestination = destinationFor(plan.segments[0].destination_id);
   setTheme(firstDestination);
   document.title = `${plan.title} — Route / 69`;
   app.replaceChildren();
   app.setAttribute("aria-busy", "false");
-  app.append(renderCover(plan, firstDestination), renderSegments(plan), renderStatus(plan));
+  app.append(renderCover(plan, firstDestination), renderSegments(plan), renderStatus(plan), renderTravelDesk(plan), renderMapDesk(plan));
   if (plan.shorter_variant) {
     const note = element("aside", "variant-note");
     note.append(element("b", "", "SHORTER OPTION"), document.createTextNode(plan.shorter_variant.hint));
