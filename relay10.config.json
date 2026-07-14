@@ -1,0 +1,51 @@
+{
+  "$schema": "https://github.com/minwoo19930301/relay10/raw/main/schema/config.schema.json",
+  "version": 1,
+  "catalog": {
+    "overrides": {}
+  },
+  "routing": {
+    "balancedThreshold": 7,
+    "frontierThreshold": 15
+  },
+  "effort": {
+    "scout": "low",
+    "architect": "max",
+    "maker": "high",
+    "reviewer": "high",
+    "explainer": "low",
+    "reader": "low"
+  },
+  "verification": {
+    "commands": [
+      {
+        "command": "git",
+        "args": ["diff", "--check"]
+      },
+      {
+        "command": "node",
+        "args": ["--check", "viewer/app.js"]
+      },
+      {
+        "command": "${PYTHON:-python3}",
+        "args": ["-m", "pytest"]
+      },
+      {
+        "command": "${PYTHON:-python3}",
+        "args": ["scripts/smoke_mcp.py"]
+      }
+    ]
+  },
+  "readerGate": {
+    "mode": "deterministic",
+    "models": [],
+    "minPass": 9,
+    "maxRounds": 2,
+    "concurrency": 3
+  },
+  "limits": {
+    "maxModelCalls": 5,
+    "stageTimeoutMs": 1200000,
+    "commandTimeoutMs": 300000
+  }
+}

@@ -44,3 +44,18 @@ commit `c0e544f604adfdc52d5c2c93480c5ac4d0aeea7e`에서 파일 내용 변경 없
 귀속을 먼저 확정하고 개인정보·위치 메타데이터 제거 여부도 직접 판단하세요.
 
 변경 또는 삭제 요청: `contact@ai-ing.org`
+
+## Gmarket Sans
+
+`viewer/assets/fonts/`의 Light, Medium, Bold WOFF2 파일은
+[G마켓 공식 서체 페이지](https://corp.gmarket.com/fonts/)가 제공하는
+`https://script.gmarket.com/fonts/` 원본을 그대로 저장했습니다. 외부 CDN에 의존하지 않고
+동일한 웹폰트를 재현하기 위한 사본이며, G마켓 안내와 폰트 내장 메타데이터에 따라 SIL Open
+Font License 1.1 조건을 적용합니다. 저작권 고지와 전체 조건은
+[`LICENSES/GmarketSans-OFL-1.1.txt`](LICENSES/GmarketSans-OFL-1.1.txt)에 있습니다.
+
+| 파일 | SHA-256 |
+| --- | --- |
+| `GmarketSansLight.woff2` | `c1637c614f11bad39da6888180b3fd2254448b763df3708f36b42a1c0fad3a78` |
+| `GmarketSansMedium.woff2` | `287ca110b290da2760c9992b1d2da63ce69fbc2f0f3d6de03aafeb0f1308ebc0` |
+| `GmarketSansBold.woff2` | `3fdf6636f00bfb6bdaeb94d61a94e5f8680c7a12b3e53ffd7cbb5794dcc37fc2` |
